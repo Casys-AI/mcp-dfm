@@ -2,8 +2,12 @@
  * Gmsh bridge — STEP file → surface STL for DFM geometry analysis.
  *
  * DFM checks need only the surface mesh (2D triangles in 3D space), not a
- * volume mesh. We invoke `gmsh -2 -format stl` to produce ASCII STL from
- * the STEP solid.
+ * volume mesh. We invoke `gmsh <step> -2 -format stl -clmax <size> -o <out>`
+ * directly — no intermediate .geo script. Validated against Gmsh 4.8.
+ *
+ * Why not a .geo script: when `-format stl` is combined with a .geo script
+ * containing a `Save "path"` command, Gmsh exits 0 but writes nothing to
+ * the Save path. The direct CLI form is the reliable surface-mesh path.
  *
  * Runtime dependency: `gmsh` must be on PATH.
  * Install: `apt install gmsh` (Debian/Ubuntu), `brew install gmsh` (macOS).
@@ -57,16 +61,19 @@ export interface TessellationResult {
 /**
  * Tessellate a STEP file into surface triangles using Gmsh (-2 surface mesh).
  *
- * The path is interpolated into a .geo script; a quote in the path would be a
- * command injection vector and is rejected before any subprocess starts.
+ * Invokes: `gmsh <stepPath> -2 -format stl -clmax <meshSizeMm> -o <stlPath>`
+ *
+ * The STEP path is passed directly as a subprocess argument (via Deno.Command,
+ * no shell interpolation), so shell injection is not a concern. The path is
+ * still checked for NUL bytes, which would silently truncate the argument.
  */
 export async function tessellateStep(
   options: TessellationOptions,
 ): Promise<TessellationResult> {
-  if (/["\\\r\n]/.test(options.stepPath)) {
+  if (/\0/.test(options.stepPath)) {
     throw new TessellationError(
-      `STEP path contains characters that cannot be embedded safely in a ` +
-        `.geo script (quote, backslash or newline): ${options.stepPath}`,
+      `STEP path contains a NUL byte, which would silently truncate the ` +
+        `argument: ${JSON.stringify(options.stepPath)}`,
     );
   }
   try {
@@ -77,18 +84,20 @@ export async function tessellateStep(
 
   const workDir = await Deno.makeTempDir({ prefix: "dfm-mesh-" });
   const stlPath = `${workDir}/surface.stl`;
-  const geoScript = `Merge "${options.stepPath}";\n` +
-    `Mesh.CharacteristicLengthMax = ${options.meshSizeMm};\n` +
-    `Mesh 2;\n` +
-    `Save "${stlPath}";\n`;
-
-  const geoPath = `${workDir}/surface.geo`;
-  await Deno.writeTextFile(geoPath, geoScript);
 
   let child;
   try {
     child = new Deno.Command("gmsh", {
-      args: [geoPath, "-format", "stl"],
+      args: [
+        options.stepPath,
+        "-2",
+        "-format",
+        "stl",
+        "-clmax",
+        String(options.meshSizeMm),
+        "-o",
+        stlPath,
+      ],
       stdout: "piped",
       stderr: "piped",
     }).spawn();
@@ -121,8 +130,13 @@ export async function tessellateStep(
   try {
     stlText = await Deno.readTextFile(stlPath);
   } catch {
+    const log = new TextDecoder().decode(stdout) +
+      new TextDecoder().decode(stderr);
     await Deno.remove(workDir, { recursive: true }).catch(() => {});
-    throw new TessellationError("gmsh reported success but wrote no STL file.");
+    throw new TessellationError(
+      "gmsh reported success but wrote no STL file. " +
+        `Log: ${log.slice(-400)}`,
+    );
   }
   await Deno.remove(workDir, { recursive: true }).catch(() => {});
 
@@ -132,8 +146,9 @@ export async function tessellateStep(
 /**
  * Parse an ASCII STL file into typed triangles.
  *
- * Binary STL is not supported — Gmsh always writes ASCII when invoked with
- * `-format stl` via a .geo script.
+ * Binary STL is not supported — Gmsh writes ASCII when invoked with
+ * `-format stl`. Binary STL starts with an 80-byte header that never
+ * begins with "solid", so binary files are detected early and rejected.
  */
 export function parseAsciiStl(stlText: string): TessellationResult {
   const triangles: Triangle[] = [];
