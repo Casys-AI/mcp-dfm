@@ -357,11 +357,12 @@ Deno.test({
       z_mm: number;
       volume_mm3: number;
     };
-    // Healthy box is 40×30×20; allow small floating-point tolerance from mesh
-    assert(Math.abs(measured.x_mm - 40) < 0.5);
-    assert(Math.abs(measured.y_mm - 30) < 0.5);
-    assert(Math.abs(measured.z_mm - 20) < 0.5);
-    assert(Math.abs(measured.volume_mm3 - 24000) < 100);
+    // Real pipeline (gmsh mesh_size=5): bbox is exact (40.0 × 30.0 × 20.0),
+    // volume is exact 24000.0 mm³ via divergence theorem on a closed mesh.
+    assert(Math.abs(measured.x_mm - 40) < 0.1);
+    assert(Math.abs(measured.y_mm - 30) < 0.1);
+    assert(Math.abs(measured.z_mm - 20) < 0.1);
+    assert(Math.abs(measured.volume_mm3 - 24000) < 10);
   },
 });
 
@@ -401,10 +402,11 @@ Deno.test({
       overhang_area_mm2: number;
       total_surface_area_mm2: number;
     };
-    // The L-bracket arm underside is horizontal (~400 mm²); allow for mesh approximation
+    // Real pipeline measurement (gmsh mesh_size=3): bottom + arm underside = 1200 mm².
+    // The fixture is an L-bracket with a 20×30 arm face horizontal at 0° from downward.
     assert(
-      measured.overhang_area_mm2 > 300,
-      `Expected overhang area > 300 mm², got ${measured.overhang_area_mm2}`,
+      measured.overhang_area_mm2 > 1000,
+      `Expected overhang area > 1000 mm², got ${measured.overhang_area_mm2}`,
     );
     assert(
       (sc.violations as unknown[]).length > 0,
@@ -460,7 +462,8 @@ Deno.test({
       min_thickness_mm: number;
       valid_ray_count: number;
     };
-    // The wall is 0.8 mm; allow some tolerance from mesh approximation
+    // Real pipeline (gmsh 0.5 mm, 300 samples): min_thickness = 0.8000 mm exact.
+    // 12 violations under the 1 mm threshold.
     assert(
       measured.min_thickness_mm < 1.0,
       `Expected min thickness < 1 mm, got ${measured.min_thickness_mm}`,
