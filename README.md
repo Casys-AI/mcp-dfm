@@ -192,6 +192,33 @@ deno task release:check       # fmt + check + lint + test (19 unit tests)
 DFM_RUN_NATIVE=1 deno task test
 ```
 
+## Docker
+
+Port du parc : **3018** (même toolchain que `mcp-calculix` et `mcp-build123d`).
+
+```bash
+# Build (arm64 / amd64 selon la plateforme locale)
+docker build -t mcp-dfm:local .
+
+# Run — expose le port 3018 localement
+docker run -d --name mcp-dfm -p 3018:3018 mcp-dfm:local
+
+# Smoke test stateless 2026-07-28 (doit lister 3 outils)
+curl -s -X POST http://127.0.0.1:3018/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+
+docker stop mcp-dfm
+```
+
+Le CMD utilise `--hostname=0.0.0.0` (flag CLI natif du serveur) pour que le port
+soit accessible depuis l'hôte. Les STEP à analyser doivent être montés dans le
+conteneur via `-v /chemin/exports:/exports` et référencés par leur chemin absolu
+dans le conteneur.
+
 ## JSR publication
 
 `@casys/mcp-dfm` is published to JSR by Erwan (human action, separate from CI).
