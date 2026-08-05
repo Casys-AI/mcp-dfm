@@ -16,13 +16,7 @@ import {
 import type { DfmTool, DfmToolCategory, DfmToolHandler } from "./tools/mod.ts";
 import type { MCPTool } from "@casys/mcp-server";
 
-export {
-  allTools,
-  getCategories,
-  getToolByName,
-  getToolsByCategory,
-  toolsByCategory,
-};
+export { allTools, getCategories, getToolByName, getToolsByCategory, toolsByCategory };
 export type { DfmTool, DfmToolCategory, DfmToolHandler };
 
 export interface MCPToolWireFormat {

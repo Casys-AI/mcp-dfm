@@ -42,8 +42,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
   properties: {
     violations: {
       type: "array",
-      description:
-        "Spatial clusters of overhang triangles exceeding the threshold.",
+      description: "Spatial clusters of overhang triangles exceeding the threshold.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -182,8 +181,7 @@ export const overhangTools: DfmTool[] = [
           type: "number",
           minimum: 0,
           maximum: 90,
-          description:
-            "Overhang threshold in degrees from the downward direction. " +
+          description: "Overhang threshold in degrees from the downward direction. " +
             "Faces within this angle from downward (-build_direction) are violations. " +
             "Typical values: 45 (FDM), 30 (SLA/SLS). Explicit — no default.",
         },
@@ -201,8 +199,7 @@ export const overhangTools: DfmTool[] = [
         },
         timeout_ms: {
           type: "number",
-          description:
-            "Time limit for the Gmsh subprocess in ms (default 60000).",
+          description: "Time limit for the Gmsh subprocess in ms (default 60000).",
         },
       },
     },
@@ -308,8 +305,7 @@ export const overhangTools: DfmTool[] = [
           } mm² total requires supports.`;
 
         return {
-          content:
-            `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
+          content: `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
           structuredContent,
         };
       } finally {

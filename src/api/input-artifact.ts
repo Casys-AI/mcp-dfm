@@ -56,8 +56,7 @@ export async function snapshotStepArtifact(
 
   const workDir = await Deno.makeTempDir({ prefix: "dfm-input-" });
   const snapshotPath = `${workDir}/input.step`;
-  const cleanup = () =>
-    Deno.remove(workDir, { recursive: true }).catch(() => {});
+  const cleanup = () => Deno.remove(workDir, { recursive: true }).catch(() => {});
 
   try {
     await Deno.copyFile(sourcePath, snapshotPath);

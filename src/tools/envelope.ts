@@ -11,11 +11,7 @@
  */
 
 import type { DfmTool } from "./types.ts";
-import {
-  GmshNotFoundError,
-  tessellateStep,
-  TessellationError,
-} from "../api/gmsh.ts";
+import { GmshNotFoundError, tessellateStep, TessellationError } from "../api/gmsh.ts";
 import { computeBoundingBox, computeVolumeMm3 } from "../api/stl-geometry.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
 
@@ -141,22 +137,18 @@ export const envelopeTools: DfmTool[] = [
           properties: {
             x: {
               type: "number",
-              description:
-                "Maximum X extent of the printer build volume in mm.",
+              description: "Maximum X extent of the printer build volume in mm.",
             },
             y: {
               type: "number",
-              description:
-                "Maximum Y extent of the printer build volume in mm.",
+              description: "Maximum Y extent of the printer build volume in mm.",
             },
             z: {
               type: "number",
-              description:
-                "Maximum Z extent of the printer build volume in mm.",
+              description: "Maximum Z extent of the printer build volume in mm.",
             },
           },
-          description:
-            "Declared printer build volume in mm. Explicit — no default.",
+          description: "Declared printer build volume in mm. Explicit — no default.",
         },
         density_kg_m3: {
           type: "number",
@@ -173,8 +165,7 @@ export const envelopeTools: DfmTool[] = [
         },
         timeout_ms: {
           type: "number",
-          description:
-            "Time limit for the Gmsh subprocess in ms (default 60000).",
+          description: "Time limit for the Gmsh subprocess in ms (default 60000).",
         },
       },
     },
@@ -259,9 +250,7 @@ export const envelopeTools: DfmTool[] = [
           measured,
           limits_declared: {
             build_volume_mm: buildVolume,
-            ...(densityKgM3 !== undefined
-              ? { density_kg_m3: densityKgM3 }
-              : {}),
+            ...(densityKgM3 !== undefined ? { density_kg_m3: densityKgM3 } : {}),
           },
           not_checked: NOT_CHECKED,
           input_artifact: {
@@ -272,20 +261,17 @@ export const envelopeTools: DfmTool[] = [
         };
 
         const summary = violations.length === 0
-          ? `Part fits in build volume (${xMm.toFixed(1)} × ${
-            yMm.toFixed(1)
-          } × ${zMm.toFixed(1)} mm).`
+          ? `Part fits in build volume (${xMm.toFixed(1)} × ${yMm.toFixed(1)} × ${
+            zMm.toFixed(1)
+          } mm).`
           : `${violations.length} envelope violation(s): ${
             violations.map((v) =>
-              `${v.axis.toUpperCase()} ${
-                v.measured_mm.toFixed(1)
-              } > ${v.limit_mm} mm`
+              `${v.axis.toUpperCase()} ${v.measured_mm.toFixed(1)} > ${v.limit_mm} mm`
             ).join(", ")
           }.`;
 
         return {
-          content:
-            `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
+          content: `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
           structuredContent,
         };
       } finally {

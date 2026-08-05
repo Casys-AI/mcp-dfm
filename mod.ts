@@ -50,10 +50,7 @@ export {
   triangleCentroid,
 } from "./src/api/stl-geometry.ts";
 
-export {
-  InputArtifactError,
-  snapshotStepArtifact,
-} from "./src/api/input-artifact.ts";
+export { InputArtifactError, snapshotStepArtifact } from "./src/api/input-artifact.ts";
 export type { InputArtifact, StepSnapshot } from "./src/api/input-artifact.ts";
 
 export {

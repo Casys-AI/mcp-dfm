@@ -137,8 +137,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
 export const thicknessTools: DfmTool[] = [
   {
     name: TOOL_NAME,
-    description:
-      "DFM check: minimum wall thickness by bidirectional ray casting. " +
+    description: "DFM check: minimum wall thickness by bidirectional ray casting. " +
       "Tessellates the STEP with Gmsh (surface STL), then invokes a Python subprocess " +
       "using Möller-Trumbore ray-triangle intersection in numpy (no trimesh). " +
       "For each sampled triangle centre, shoots a ray along the inward normal and " +
@@ -308,8 +307,7 @@ export const thicknessTools: DfmTool[] = [
             } mm (threshold: ${minThicknessMm} mm).`;
 
           return {
-            content:
-              `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
+            content: `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,
             structuredContent,
           };
         } finally {

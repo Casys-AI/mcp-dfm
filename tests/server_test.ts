@@ -23,10 +23,7 @@ import {
   triangleArea,
   triangleCentroid,
 } from "../src/api/stl-geometry.ts";
-import {
-  InputArtifactError,
-  snapshotStepArtifact,
-} from "../src/api/input-artifact.ts";
+import { InputArtifactError, snapshotStepArtifact } from "../src/api/input-artifact.ts";
 import { parseAsciiStl, TessellationError } from "../src/api/gmsh.ts";
 import type { Triangle } from "../src/api/gmsh.ts";
 import { allTools } from "../src/tools/mod.ts";
@@ -338,8 +335,7 @@ Deno.test("DFM CLI defaults to port 3018 and 127.0.0.1", () => {
 // ── Native integration tests (require gmsh + python3+numpy on PATH) ────────
 
 Deno.test({
-  name:
-    "dfm_check_envelope detects no violation for healthy box inside build volume",
+  name: "dfm_check_envelope detects no violation for healthy box inside build volume",
   ignore: !RUN_NATIVE,
   fn: async () => {
     const tool = allTools.find((t) => t.name === "dfm_check_envelope");
@@ -367,8 +363,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "dfm_check_envelope detects violation for healthy box outside build volume",
+  name: "dfm_check_envelope detects violation for healthy box outside build volume",
   ignore: !RUN_NATIVE,
   fn: async () => {
     const tool = allTools.find((t) => t.name === "dfm_check_envelope");
@@ -416,8 +411,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "dfm_check_overhangs finds no violations on healthy box with large threshold",
+  name: "dfm_check_overhangs finds no violations on healthy box with large threshold",
   ignore: !RUN_NATIVE,
   fn: async () => {
     const tool = allTools.find((t) => t.name === "dfm_check_overhangs");
@@ -437,9 +431,7 @@ Deno.test({
     assert(Array.isArray(sc.violations), "violations must be an array");
     assert(Array.isArray(sc.not_checked), "not_checked must be an array");
     assert(
-      (sc.not_checked as string[]).some((s) =>
-        s.includes("print-bed contact face")
-      ),
+      (sc.not_checked as string[]).some((s) => s.includes("print-bed contact face")),
       "not_checked must mention print-bed contact face",
     );
   },
