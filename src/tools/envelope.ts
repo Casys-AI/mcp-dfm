@@ -1,8 +1,8 @@
 /**
  * dfm_check_envelope — bounding box and optional mass vs a declared print volume.
  *
- * The simplest and most-used DFM check: does the part fit the printer, and
- * does it meet a declared mass budget?
+ * Reports whether the part fits a caller-declared axis-aligned envelope and,
+ * when density is supplied, the mass implied by the measured mesh volume.
  *
  * Algorithm: Gmsh STEP → surface STL → bounding box from vertex extrema →
  * volume from divergence theorem (closed surface only) → mass = volume × density.
@@ -14,6 +14,14 @@ import type { DfmTool } from "./types.ts";
 import { GmshNotFoundError, tessellateStep, TessellationError } from "../api/gmsh.ts";
 import { computeBoundingBox, computeVolumeMm3 } from "../api/stl-geometry.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import {
+  rejectUnknownArgs,
+  requireBuildVolume,
+  requireFinitePositive,
+  requireNonEmptyString,
+  requireOptionalFinitePositive,
+  requireOptionalSha256Hex,
+} from "./input-args.ts";
 
 const TOOL_NAME = "dfm_check_envelope";
 
@@ -117,6 +125,7 @@ export const envelopeTools: DfmTool[] = [
     outputSchema: OUTPUT_SCHEMA,
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       required: ["step_path", "build_volume_mm", "mesh_size_mm"],
       properties: {
         step_path: {
@@ -137,14 +146,17 @@ export const envelopeTools: DfmTool[] = [
           properties: {
             x: {
               type: "number",
+              exclusiveMinimum: 0,
               description: "Maximum X extent of the printer build volume in mm.",
             },
             y: {
               type: "number",
+              exclusiveMinimum: 0,
               description: "Maximum Y extent of the printer build volume in mm.",
             },
             z: {
               type: "number",
+              exclusiveMinimum: 0,
               description: "Maximum Z extent of the printer build volume in mm.",
             },
           },
@@ -152,12 +164,14 @@ export const envelopeTools: DfmTool[] = [
         },
         density_kg_m3: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Material density in kg/m³ (e.g. 2700 for Al 6061, 7850 for steel). " +
             "Required to compute mass_kg. Omit to skip mass reporting.",
         },
         mesh_size_mm: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Gmsh surface element size in mm. Coarser is faster for envelope checks " +
             "(the bounding box is insensitive to tessellation fineness). " +
@@ -165,25 +179,51 @@ export const envelopeTools: DfmTool[] = [
         },
         timeout_ms: {
           type: "number",
+          exclusiveMinimum: 0,
           description: "Time limit for the Gmsh subprocess in ms (default 60000).",
         },
       },
     },
     handler: async (args) => {
-      const stepPath = args.step_path as string;
-      const buildVolume = args.build_volume_mm as {
-        x: number;
-        y: number;
-        z: number;
-      };
-      const densityKgM3 = args.density_kg_m3 as number | undefined;
-      const meshSizeMm = args.mesh_size_mm as number;
-      const timeoutMs = (args.timeout_ms as number) ?? 60_000;
+      rejectUnknownArgs(args, [
+        "step_path",
+        "expected_step_sha256",
+        "build_volume_mm",
+        "density_kg_m3",
+        "mesh_size_mm",
+        "timeout_ms",
+      ], TOOL_NAME);
+      const stepPath = requireNonEmptyString(
+        args.step_path,
+        "step_path",
+        TOOL_NAME,
+      );
+      const expectedStepSha256 = requireOptionalSha256Hex(
+        args.expected_step_sha256,
+        "expected_step_sha256",
+        TOOL_NAME,
+      );
+      const buildVolume = requireBuildVolume(args.build_volume_mm, TOOL_NAME);
+      const densityKgM3 = requireOptionalFinitePositive(
+        args.density_kg_m3,
+        "density_kg_m3",
+        TOOL_NAME,
+      );
+      const meshSizeMm = requireFinitePositive(
+        args.mesh_size_mm,
+        "mesh_size_mm",
+        TOOL_NAME,
+      );
+      const timeoutMs = requireOptionalFinitePositive(
+        args.timeout_ms,
+        "timeout_ms",
+        TOOL_NAME,
+      ) ?? 60_000;
 
       const snapshot = await snapshotStepArtifact(
         TOOL_NAME,
         stepPath,
-        args.expected_step_sha256 as string | undefined,
+        expectedStepSha256,
       );
 
       try {

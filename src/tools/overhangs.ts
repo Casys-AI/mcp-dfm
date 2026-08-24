@@ -18,11 +18,20 @@ import {
   triangleCentroid,
 } from "../api/stl-geometry.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import {
+  rejectUnknownArgs,
+  requireFiniteInRange,
+  requireFinitePositive,
+  requireFiniteVector3,
+  requireNonEmptyString,
+  requireOptionalFinitePositive,
+  requireOptionalSha256Hex,
+} from "./input-args.ts";
 
 const TOOL_NAME = "dfm_check_overhangs";
 
 const NOT_CHECKED = [
-  "The print-bed contact face is not excluded — the bottommost face of the part always appears as a violation (angle = 0°). Callers should filter by the Z position of the part's minimum Z face.",
+  "The print-bed contact face is not excluded and may be reported when its angle is below the declared threshold. The provider returns no global part minimum or bed plane; any downstream filter must use an explicit, reviewed plane and tolerance.",
   "Support structure feasibility, cost, or optimal placement is not modelled.",
   "Curved surfaces are approximated by the tessellation; tighter mesh_size_mm improves accuracy at the cost of runtime.",
   "Material-specific bridging distance limits are not considered.",
@@ -42,7 +51,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
   properties: {
     violations: {
       type: "array",
-      description: "Spatial clusters of overhang triangles exceeding the threshold.",
+      description: "Spatial clusters of triangles below the declared angle threshold.",
       items: {
         type: "object",
         additionalProperties: false,
@@ -134,10 +143,10 @@ export const overhangTools: DfmTool[] = [
       "DFM check: surface overhang detection. Tessellates the STEP with Gmsh, then " +
       "computes the angle between each triangle's outward normal and the declared " +
       "build_direction. Triangles whose angle from the downward direction " +
-      "(-build_direction) is below max_overhang_deg are violation zones requiring " +
-      "supports. Returns total overhang area and bounding boxes of violation clusters. " +
+      "(-build_direction) is below max_overhang_deg are reported as caller-threshold " +
+      "violations. Returns total overhang area and bounding boxes of violation clusters. " +
       "Requires gmsh on PATH. Units: mm, degrees. " +
-      "NOT CHECKED: the print-bed contact face is always counted as a violation; " +
+      "NOT CHECKED: print-bed contact faces are not excluded; " +
       "support feasibility/cost not modelled; bridging limits not considered; " +
       "curved surfaces approximated by tessellation.",
     category: "overhangs",
@@ -150,6 +159,7 @@ export const overhangTools: DfmTool[] = [
     outputSchema: OUTPUT_SCHEMA,
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       required: [
         "step_path",
         "build_direction",
@@ -173,9 +183,9 @@ export const overhangTools: DfmTool[] = [
           minItems: 3,
           maxItems: 3,
           description:
-            "Unit vector of the build direction (printing upward). [0, 0, 1] = +Z upward. " +
-            "Explicit — no default. The downward direction (-build_direction) is used to " +
-            "detect faces that require supports.",
+            "Non-zero vector of the build direction (printing upward); the server " +
+            "normalizes it. [0, 0, 1] = +Z upward. Explicit — no default. The downward " +
+            "direction (-build_direction) is used for the caller-threshold comparison.",
         },
         max_overhang_deg: {
           type: "number",
@@ -187,30 +197,72 @@ export const overhangTools: DfmTool[] = [
         },
         mesh_size_mm: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Gmsh surface element size in mm. Finer mesh = more accurate overhang " +
             "area; tighten to 1 mm for small features, use 5–10 mm for large parts.",
         },
         cluster_radius_mm: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Spatial radius for merging adjacent violation triangles into one zone " +
             "(default: 3× mesh_size_mm). Larger values produce fewer, coarser zones.",
         },
         timeout_ms: {
           type: "number",
+          exclusiveMinimum: 0,
           description: "Time limit for the Gmsh subprocess in ms (default 60000).",
         },
       },
     },
     handler: async (args) => {
-      const stepPath = args.step_path as string;
-      const buildDirection = args.build_direction as [number, number, number];
-      const maxOverhangDeg = args.max_overhang_deg as number;
-      const meshSizeMm = args.mesh_size_mm as number;
-      const clusterRadiusMm = (args.cluster_radius_mm as number | undefined) ??
-        meshSizeMm * 3;
-      const timeoutMs = (args.timeout_ms as number) ?? 60_000;
+      rejectUnknownArgs(args, [
+        "step_path",
+        "expected_step_sha256",
+        "build_direction",
+        "max_overhang_deg",
+        "mesh_size_mm",
+        "cluster_radius_mm",
+        "timeout_ms",
+      ], TOOL_NAME);
+      const stepPath = requireNonEmptyString(
+        args.step_path,
+        "step_path",
+        TOOL_NAME,
+      );
+      const expectedStepSha256 = requireOptionalSha256Hex(
+        args.expected_step_sha256,
+        "expected_step_sha256",
+        TOOL_NAME,
+      );
+      const buildDirection = requireFiniteVector3(
+        args.build_direction,
+        "build_direction",
+        TOOL_NAME,
+      );
+      const maxOverhangDeg = requireFiniteInRange(
+        args.max_overhang_deg,
+        "max_overhang_deg",
+        TOOL_NAME,
+        0,
+        90,
+      );
+      const meshSizeMm = requireFinitePositive(
+        args.mesh_size_mm,
+        "mesh_size_mm",
+        TOOL_NAME,
+      );
+      const clusterRadiusMm = requireOptionalFinitePositive(
+        args.cluster_radius_mm,
+        "cluster_radius_mm",
+        TOOL_NAME,
+      ) ?? meshSizeMm * 3;
+      const timeoutMs = requireOptionalFinitePositive(
+        args.timeout_ms,
+        "timeout_ms",
+        TOOL_NAME,
+      ) ?? 60_000;
 
       // Reject zero-length build direction before any subprocess.
       const normBd = normalize(buildDirection);
@@ -223,7 +275,7 @@ export const overhangTools: DfmTool[] = [
       const snapshot = await snapshotStepArtifact(
         TOOL_NAME,
         stepPath,
-        args.expected_step_sha256 as string | undefined,
+        expectedStepSha256,
       );
 
       try {

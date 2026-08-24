@@ -7,8 +7,10 @@
  */
 import { assert, assertEquals } from "@std/assert";
 import { TextLineStream } from "@std/streams/text-line-stream";
+import denoConfig from "../deno.json" with { type: "json" };
 
 const SHIM_PORT = 3930;
+const PACKAGE_VERSION = denoConfig.version;
 
 async function collectResponses(
   stdout: ReadableStream<Uint8Array>,
@@ -80,6 +82,11 @@ Deno.test(
       );
       const serverInfo = init.serverInfo as Record<string, unknown>;
       assertEquals(serverInfo.name, "mcp-dfm");
+      assertEquals(
+        serverInfo.version,
+        PACKAGE_VERSION,
+        "the stdio handshake must expose the package version discovered from HTTP",
+      );
 
       const listed = responses[1].result as Record<string, unknown>;
       assertEquals(responses[1].id, 2);

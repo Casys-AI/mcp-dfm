@@ -1,5 +1,5 @@
 /**
- * dfm_check_min_thickness — minimum wall thickness via bidirectional ray casting.
+ * dfm_check_min_thickness — sampled wall thickness via inward-normal ray casting.
  *
  * Algorithm:
  *   1. Gmsh STEP → surface STL (ASCII, watertight).
@@ -25,6 +25,14 @@ import { tessellateStep } from "../api/gmsh.ts";
 import { clusterViolations } from "../api/stl-geometry.ts";
 import { runThicknessCheck } from "../api/thickness-runner.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import {
+  rejectUnknownArgs,
+  requireFinitePositive,
+  requireNonEmptyString,
+  requireOptionalFinitePositive,
+  requireOptionalFinitePositiveInteger,
+  requireOptionalSha256Hex,
+} from "./input-args.ts";
 
 const TOOL_NAME = "dfm_check_min_thickness";
 
@@ -137,7 +145,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
 export const thicknessTools: DfmTool[] = [
   {
     name: TOOL_NAME,
-    description: "DFM check: minimum wall thickness by bidirectional ray casting. " +
+    description: "DFM check: sampled wall thickness by inward-normal ray casting. " +
       "Tessellates the STEP with Gmsh (surface STL), then invokes a Python subprocess " +
       "using Möller-Trumbore ray-triangle intersection in numpy (no trimesh). " +
       "For each sampled triangle centre, shoots a ray along the inward normal and " +
@@ -156,6 +164,7 @@ export const thicknessTools: DfmTool[] = [
     outputSchema: OUTPUT_SCHEMA,
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       required: ["step_path", "min_thickness_mm", "mesh_size_mm"],
       properties: {
         step_path: {
@@ -177,48 +186,84 @@ export const thicknessTools: DfmTool[] = [
         },
         mesh_size_mm: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Gmsh surface element size in mm. Smaller = finer mesh = more accurate " +
-            "but slower. Set to ≤ min_thickness_mm / 2 to reliably detect the thinnest wall.",
+            "but slower. As a starting point, use at most min_thickness_mm / 2; " +
+            "sampling still cannot guarantee the global minimum.",
         },
         sample_count: {
-          type: "number",
+          type: "integer",
+          exclusiveMinimum: 0,
           description:
             "Number of triangle centres to sample for ray casting (default 500). " +
             "Higher values improve coverage at the cost of runtime.",
         },
         cluster_radius_mm: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Spatial radius for merging adjacent violation points into one zone " +
             "(default: 3× mesh_size_mm).",
         },
         timeout_ms: {
           type: "number",
+          exclusiveMinimum: 0,
           description:
             "Total time limit in ms covering both Gmsh and Python subprocess (default 120000).",
         },
       },
     },
     handler: async (args) => {
-      const stepPath = args.step_path as string;
-      const minThicknessMm = args.min_thickness_mm as number;
-      const meshSizeMm = args.mesh_size_mm as number;
-      const sampleCount = (args.sample_count as number | undefined) ?? 500;
-      const clusterRadiusMm = (args.cluster_radius_mm as number | undefined) ??
-        meshSizeMm * 3;
-      const timeoutMs = (args.timeout_ms as number) ?? 120_000;
-
-      if (minThicknessMm <= 0) {
-        throw new TypeError(
-          `[${TOOL_NAME}] min_thickness_mm must be positive.`,
-        );
-      }
+      rejectUnknownArgs(args, [
+        "step_path",
+        "expected_step_sha256",
+        "min_thickness_mm",
+        "mesh_size_mm",
+        "sample_count",
+        "cluster_radius_mm",
+        "timeout_ms",
+      ], TOOL_NAME);
+      const stepPath = requireNonEmptyString(
+        args.step_path,
+        "step_path",
+        TOOL_NAME,
+      );
+      const expectedStepSha256 = requireOptionalSha256Hex(
+        args.expected_step_sha256,
+        "expected_step_sha256",
+        TOOL_NAME,
+      );
+      const minThicknessMm = requireFinitePositive(
+        args.min_thickness_mm,
+        "min_thickness_mm",
+        TOOL_NAME,
+      );
+      const meshSizeMm = requireFinitePositive(
+        args.mesh_size_mm,
+        "mesh_size_mm",
+        TOOL_NAME,
+      );
+      const sampleCount = requireOptionalFinitePositiveInteger(
+        args.sample_count,
+        "sample_count",
+        TOOL_NAME,
+      ) ?? 500;
+      const clusterRadiusMm = requireOptionalFinitePositive(
+        args.cluster_radius_mm,
+        "cluster_radius_mm",
+        TOOL_NAME,
+      ) ?? meshSizeMm * 3;
+      const timeoutMs = requireOptionalFinitePositive(
+        args.timeout_ms,
+        "timeout_ms",
+        TOOL_NAME,
+      ) ?? 120_000;
 
       const snapshot = await snapshotStepArtifact(
         TOOL_NAME,
         stepPath,
-        args.expected_step_sha256 as string | undefined,
+        expectedStepSha256,
       );
 
       try {

@@ -1,229 +1,301 @@
 # @casys/mcp-dfm
 
-Stateless MCP server for design-for-manufacturability (DFM) geometry checks.
-Three oracle checks applied to STEP files — the same verifications Protolabs,
-Xometry and JLC run automatically at quote time.
+Measured design-for-manufacturability checks for STEP geometry, exposed as an MCP
+server. The server snapshots the exact STEP bytes, runs native geometry analysis, and
+compares the resulting measurements with limits supplied by the caller.
 
-Port: **3018** — same toolchain as `mcp-calculix` (3015) and `mcp-build123d` (3014).
-Protocol: stateless `2026-07-28`.
+It does not declare a part "manufacturable" or select a printer, material, orientation,
+or threshold.
 
-## Doctrine
+| Tool                      | What it measures                                                  | Caller-declared comparison                                  |
+| ------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| `dfm_check_envelope`      | Axis-aligned X/Y/Z extents, closed-mesh volume, and optional mass | `build_volume_mm: { x, y, z }` and optional `density_kg_m3` |
+| `dfm_check_overhangs`     | Downward-facing triangle area and spatial zones                   | `build_direction` and `max_overhang_deg`                    |
+| `dfm_check_min_thickness` | Sampled inward-normal wall thickness and thin zones               | `min_thickness_mm`                                          |
 
-The server computes and reports — it never judges. **"Manufacturable" is not its
-verdict.** Every tool reports measured values against thresholds that the caller
-declares explicitly; no process-specific default is applied silently.
+Every registered check consumes an absolute `step_path`. Supplying
+`expected_step_sha256` makes the call fail before Gmsh runs if the private input
+snapshot does not match the expected bytes. Geometry is reported in mm, mm², and mm³;
+angles are degrees; density is kg/m³; mass is kg.
 
-What the server guarantees:
-- Every check runs against the exact bytes attested by SHA-256 (see [Attestation](#attestation-pattern)).
-- Every output includes a `not_checked` list — what this check does not cover is
-  declared in the response, not inferred from silence.
-- All units are mm and degrees throughout; mass requires an explicit `density_kg_m3`.
-- Errors are typed (`GmshNotFoundError`, `PythonRuntimeError`, `InputArtifactError`) —
-  never silent fallbacks.
+## Measured DFM is not a documentary printability estimate
 
-## Runtime dependencies
+These tools execute against a STEP snapshot. An empty `violations` array means only that
+the measured values did not cross the limits declared for that call. It is not a general
+printability or supplier-acceptance verdict.
 
-| Dependency | Why | Install |
-|---|---|---|
-| `gmsh` on PATH | STEP → surface STL tessellation (all three tools) | `apt install gmsh` / `brew install gmsh` |
-| `python3` with `numpy` | Ray-triangle intersection for `dfm_check_min_thickness` | `pip install numpy` |
+In the Casys Digital Thread integration, the measured `industrialize.run-dfm-checks@1`
+path is deliberately separate from the older documentary
+`industrialize.observe-printability@1` path. The measured case binds an attested STEP,
+the three-axis `build_volume_mm` object, and any downstream bed-contact filter. Results
+from the two paths are not interchangeable.
 
-The envelope and overhang checks only need `gmsh`. The thickness check additionally
-needs `python3 + numpy`. Both are checked at call time and return typed errors if
-missing — they do not fail silently.
+## Quick start: Docker over stdio
 
-Fixtures were generated with build123d inside the
-`casys-digital-thread-mcp-build123d-1` container (Python 3.12 + gmsh 4.8). The
-same container can be used as a runtime host when gmsh/python3 are not on the
-host PATH.
+The published image contains Gmsh, Python, and NumPy. A classic stdio MCP host can
+launch it without installing those runtimes on the host machine. The digest below is
+the published multi-architecture 0.2.0 image. Package metadata in that image is
+0.2.0; `server/discover` and health still report the legacy runtime identity 0.1.0.
+This checkout prepares unpublished 0.2.1, which aligns package and server metadata.
+The stricter closed schemas and ordinary-input preflight in 0.2.1 are
+prepared-source/local-image behavior until that version is published; valid 0.2.0
+examples remain usable.
 
-## Tools
+```json
+{
+  "mcpServers": {
+    "dfm": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "/absolute/path/to/step-files:/data:ro",
+        "ghcr.io/casys-ai/mcp-dfm@sha256:a31aa702e45e4445c67454f807832b60455211664fa98ff36f54948aedec4fb9",
+        "stdio"
+      ]
+    }
+  }
+}
+```
 
-### `dfm_check_envelope`
+Use paths as seen by the container in tool calls, for example `/data/bracket.step`, not
+the host path. The host directory must be shared with Docker Desktop where applicable.
+Configuration file names vary by MCP host, but the `command` and `args` contract above
+is the tested stdio entrypoint.
 
-Bounding box of the STEP file (X/Y/Z in mm) compared against a declared print
-volume. Optionally reports mass when `density_kg_m3` is supplied.
+The stdio adapter answers the classic MCP `initialize` handshake locally and forwards
+calls to a private stateless HTTP server. It is shipped in the Docker image and source
+checkout; it is not a public JSR export.
 
-Algorithm: Gmsh STEP → surface STL (`-2 -format stl`) → bounding box from vertex
-extrema → volume via the divergence theorem on the closed surface →
-mass = volume_mm3 / 1e9 × density_kg_m3.
+## Docker over HTTP
 
-**Inputs (all explicit, no defaults):**
+The default image mode is stateless HTTP on `/mcp`, port 3018, protocol `2026-07-28`:
 
-| Field | Required | Description |
-|---|---|---|
-| `step_path` | yes | Absolute path to the STEP file |
-| `build_volume_mm` | yes | `{x, y, z}` declared printer volume in mm |
-| `mesh_size_mm` | yes | Gmsh tessellation fineness (5 mm is fine for a 50 mm part) |
-| `expected_step_sha256` | no | SHA-256 hex; mismatch aborts before Gmsh |
-| `density_kg_m3` | no | Required to compute `mass_kg`; omit to skip |
-| `timeout_ms` | no | Gmsh subprocess timeout in ms (default 60000) |
+```bash
+docker run --rm \
+  -p 127.0.0.1:3018:3018 \
+  -v "$PWD/tests/fixtures:/data:ro" \
+  ghcr.io/casys-ai/mcp-dfm@sha256:a31aa702e45e4445c67454f807832b60455211664fa98ff36f54948aedec4fb9
+```
 
-**Output structure:**
+From a source checkout, this complete call measures the committed 40 × 30 × 20 mm
+fixture. `Mcp-Name` must mirror `params.name`:
+
+```bash
+curl -sS -X POST http://127.0.0.1:3018/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' \
+  -H 'Mcp-Name: dfm_check_envelope' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "dfm_check_envelope",
+      "arguments": {
+        "step_path": "/data/dfm_healthy_box.step",
+        "expected_step_sha256": "0eeade1298710e8ceff66c52f2b7e51bbfb2b3856fafd955fd2cfa6107492693",
+        "build_volume_mm": { "x": 200, "y": 200, "z": 200 },
+        "mesh_size_mm": 5,
+        "density_kg_m3": 2700
+      },
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    }
+  }'
+```
+
+The measured result includes:
 
 ```json
 {
   "violations": [],
-  "measured": { "x_mm": 40, "y_mm": 30, "z_mm": 20, "volume_mm3": 24000, "mass_kg": 0.216 },
-  "limits_declared": { "build_volume_mm": { "x": 200, "y": 200, "z": 200 }, "density_kg_m3": 9000 },
-  "not_checked": [
-    "Part orientation is not optimised — the bounding box is axis-aligned with the STEP coordinate system; the tightest-fitting orientation is not computed.",
-    "Support structure volume is not included in the envelope.",
-    "Mass is not reported when density_kg_m3 is omitted.",
-    "The volume computation assumes a closed (watertight) surface mesh; open shells yield an inaccurate result."
-  ],
-  "input_artifact": { "sha256": "a3f4...", "bytes": 15456, "source_path": "/exports/part.step" }
+  "measured": {
+    "x_mm": 40,
+    "y_mm": 30,
+    "z_mm": 20,
+    "volume_mm3": 23999.999999999967,
+    "mass_kg": 0.06479999999999991
+  },
+  "limits_declared": {
+    "build_volume_mm": { "x": 200, "y": 200, "z": 200 },
+    "density_kg_m3": 2700
+  },
+  "input_artifact": {
+    "sha256": "0eeade1298710e8ceff66c52f2b7e51bbfb2b3856fafd955fd2cfa6107492693",
+    "bytes": 15456,
+    "source_path": "/data/dfm_healthy_box.step"
+  }
 }
 ```
 
-Measured on the healthy-box fixture (40×30×20 mm, mesh_size 5):
-- bbox: 40.0 × 30.0 × 20.0 mm
-- volume: 24000.0 mm³ (exact via divergence theorem on closed mesh)
+Use `structuredContent` as the machine-readable result. The text `content` is a short
+summary for the model. Floating-point values are not rounded in the wire result, so
+consumers should apply tolerances appropriate to their case.
 
----
+The images are published for `linux/amd64` and `linux/arm64`.
+`ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
+for a version or capability. The digest above is the published 0.2.0 image
+contract; runtime identity from that image still reports 0.1.0.
+
+## Tool contracts
+
+Closed schemas and ordinary-input preflight are prepared-source/local-image behavior
+until 0.2.1 is published. In this checkout, every registered input object is closed
+(`additionalProperties: false`). Unknown properties are rejected both by MCP schema
+validation and when a handler is invoked directly. Numeric sizes and dimensions must
+be finite and strictly positive: build-volume X/Y/Z, `mesh_size_mm`, optional
+`cluster_radius_mm`, optional `density_kg_m3`, `min_thickness_mm`, and optional
+`timeout_ms`. `sample_count` must be a finite positive integer. `max_overhang_deg`
+remains 0–90° inclusive; `build_direction` must be a non-zero three-vector with finite
+components. These checks run before the STEP snapshot or any native subprocess. The
+server still does not invent manufacturing defaults or arbitrary maximum caps.
+
+### `dfm_check_envelope`
+
+Gmsh tessellates the STEP into a surface STL. The tool computes the bounding box from
+vertex extrema, computes volume using the divergence theorem, and computes mass only
+when density is supplied:
+
+`mass_kg = volume_mm3 / 1e9 × density_kg_m3`
+
+| Field                  | Required | Description                                                                                  |
+| ---------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file on the server filesystem                                      |
+| `build_volume_mm`      | yes      | Object with strictly positive X, Y, and Z extents in mm: `{ "x": 200, "y": 200, "z": 200 }` |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm                                     |
+| `expected_step_sha256` | no       | Expected 64-character STEP SHA-256; mismatch aborts before Gmsh                              |
+| `density_kg_m3`        | no       | Finite strictly positive caller-owned density used to add `mass_kg`; no density is inferred  |
+| `timeout_ms`           | no       | Finite strictly positive Gmsh subprocess timeout in ms; default 60000                        |
+
+The comparison is axis by axis in the STEP coordinate system. The tool does not rotate
+the part to find a tighter fit. Volume assumes a closed surface; open shells can produce
+an inaccurate value rather than a valid solid volume.
+
+Measured native fixture result at `mesh_size_mm: 5`: 40.0 × 30.0 × 20.0 mm and
+approximately 24000.0 mm³.
 
 ### `dfm_check_overhangs`
 
-Surface overhang detection. Tessellates the STEP with Gmsh, then computes the
-angle between each triangle's outward normal and the declared `build_direction`.
-Triangles whose angle from the downward direction (-build_direction) is below
-`max_overhang_deg` are violations. Violation triangles are merged into spatial
-clusters for reporting.
+For each tessellated triangle, the tool measures the angle between its outward normal
+and `-build_direction`. The server normalizes any non-zero three-vector. With
+`[0, 0, 1]`, 0° points straight down, 90° is vertical, and 180° points straight up. A
+triangle is included when its angle is strictly less than `max_overhang_deg`; matching
+triangles are clustered into zones.
 
-Angle convention: 0° = face points straight down (worst overhang); 90° = vertical
-face; 180° = face points straight up (self-supporting).
+| Field                  | Required | Description                                                          |
+| ---------------------- | -------- | -------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file                                       |
+| `build_direction`      | yes      | Non-zero finite `[x, y, z]` build direction; `[0, 0, 1]` is +Z      |
+| `max_overhang_deg`     | yes      | Finite threshold in degrees from the downward direction, 0–90 inclusive |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm             |
+| `expected_step_sha256` | no       | Expected STEP SHA-256                                                |
+| `cluster_radius_mm`    | no       | Finite strictly positive spatial merge radius; default `3 × mesh_size_mm` |
+| `timeout_ms`           | no       | Finite strictly positive Gmsh timeout in ms; default 60000           |
 
-**Inputs (all explicit):**
+Important bed-contact behavior: the provider does not remove the bottom face. For the
+healthy-box fixture at +Z, the returned zone is the 1200 mm² face at Z = -10 mm, with
+`bbox.min[2]` and `bbox.max[2]` both equal to -10. The output does not separately
+declare the part's global minimum Z, and there is no `z_min` input. A workflow may
+remove a bed-contact zone only from an explicit, reviewed plane and tolerance; it must
+not silently infer one from the lowest reported zone.
 
-| Field | Required | Description |
-|---|---|---|
-| `step_path` | yes | Absolute path to the STEP file |
-| `build_direction` | yes | Unit vector `[x, y, z]`; `[0, 0, 1]` = build along +Z |
-| `max_overhang_deg` | yes | Threshold from downward direction (e.g. 45 for FDM) |
-| `mesh_size_mm` | yes | Tessellation fineness |
-| `expected_step_sha256` | no | SHA-256 hex; mismatch aborts before Gmsh |
-| `cluster_radius_mm` | no | Merge radius for adjacent violation triangles (default 3× mesh_size_mm) |
-| `timeout_ms` | no | Gmsh subprocess timeout in ms (default 60000) |
+The tool also does not model support placement or cost, bridging rules, or
+material-specific behavior. Curved surfaces are approximated by the mesh.
 
-**What is NOT checked (declared in every response):**
-
-- The print-bed contact face is not excluded — the bottommost face of the part always
-  appears as a violation (angle = 0°). Callers should filter by the Z position of the
-  part's minimum Z face.
-- Support structure feasibility, cost, or optimal placement is not modelled.
-- Curved surfaces are approximated by the tessellation; tighter `mesh_size_mm`
-  improves accuracy at the cost of runtime.
-- Material-specific bridging distance limits are not considered.
-- Self-supporting geometry rules (bridges, overhangs supported by walls) are not modelled.
-
-Measured on the overhang L-bracket fixture (mesh_size 3, threshold 45°, build +Z):
-- overhang_area_mm2 > 1000 mm² (bottom + horizontal arm underside)
-- at least 1 violation zone
-
----
+Measured L-bracket fixture result at `mesh_size_mm: 3`, 45°, build +Z: overhang area
+greater than 1000 mm² and at least one zone, including the bed face.
 
 ### `dfm_check_min_thickness`
 
-Minimum wall thickness by bidirectional ray casting. For each sampled triangle
-centre, shoots a ray along the inward normal (negated Gmsh outward normal) and
-records the first Möller-Trumbore intersection distance.
+The tool tessellates with Gmsh, samples triangle centres, and invokes Python with NumPy
+to cast an inward-normal Möller-Trumbore ray. It reports the first opposing surface
+distance, the minimum sampled distance, sample coverage, and clustered points below the
+declared threshold.
 
-Algorithm: Gmsh STEP → surface STL → Python subprocess (numpy, embedded script,
-no trimesh) → JSON result.
+| Field                  | Required | Description                                                                   |
+| ---------------------- | -------- | ----------------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file                                                |
+| `min_thickness_mm`     | yes      | Finite strictly positive caller-declared violation threshold                  |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh element size; start at most half the threshold  |
+| `expected_step_sha256` | no       | Expected STEP SHA-256                                                         |
+| `sample_count`         | no       | Finite positive integer triangle centres to sample; default 500               |
+| `cluster_radius_mm`    | no       | Finite strictly positive spatial merge radius; default `3 × mesh_size_mm`     |
+| `timeout_ms`           | no       | Finite strictly positive total Gmsh and Python timeout in ms; default 120000  |
 
-**Inputs (all explicit):**
+This is sampled inward-normal thickness, not a global exact minimum-distance proof.
+Sampling can miss a small or diagonal thin region, and the method assumes a closed
+watertight surface. It does not apply FDM, SLA, SLS, or material-specific feature rules.
 
-| Field | Required | Description |
-|---|---|---|
-| `step_path` | yes | Absolute path to the STEP file |
-| `min_thickness_mm` | yes | Violation threshold declared by the caller |
-| `mesh_size_mm` | yes | Tessellation fineness (set ≤ min_thickness_mm / 2 to reliably catch the thinnest wall) |
-| `expected_step_sha256` | no | SHA-256 hex; mismatch aborts before Gmsh |
-| `sample_count` | no | Triangle centres to sample (default 500) |
-| `cluster_radius_mm` | no | Merge radius for adjacent violations (default 3× mesh_size_mm) |
-| `timeout_ms` | no | Total timeout covering both Gmsh and Python in ms (default 120000) |
+Measured thin-wall fixture result at `mesh_size_mm: 0.5`, `sample_count: 300`, and
+threshold 1.0 mm: minimum 0.8000 mm and 12 sampled violations.
 
-**What is NOT checked (declared in every response):**
+## Input attestation
 
-- Sampling may miss a wall thinner than the triangle edge length — tighten
-  `mesh_size_mm` to reduce this risk.
-- Only works on closed (watertight) surface meshes; open shells return an error.
-- Internal features (blind holes, pockets) are measured if their surface is captured
-  by the tessellation.
-- Material-specific minimum feature rules (e.g. SLS vs FDM vs SLA) are not applied —
-  only the caller-declared threshold is used.
-- The algorithm reports thickness along the inward face normal direction, not the true
-  minimum wall thickness in all directions; a very thin diagonal wall may be undersampled.
+Before invoking a native process, each tool:
 
-Measured on the thin-wall fixture (hollow box, 0.8 mm wall, mesh_size 0.5, sample_count 300,
-threshold 1.0 mm):
-- min_thickness_mm: 0.8000 mm (exact)
-- 12 sample violations under the 1 mm threshold
+1. Copies `step_path` into a private temporary directory.
+2. Hashes that private copy with SHA-256.
+3. Compares it with `expected_step_sha256`, when supplied.
+4. Makes the snapshot read-only.
+5. Passes only the snapshot to Gmsh and returns its digest, byte count, and original
+   source path in `input_artifact`.
 
----
+The returned digest therefore identifies the bytes actually consumed. The expectation is
+optional in the raw MCP schema so exploratory calls are possible; provenance-sensitive
+workflows should require it.
 
-## Attestation pattern
+## Run from source or JSR
 
-Every tool:
+The HTTP server requires native executables on `PATH`:
 
-1. Copies the caller-supplied STEP path into a private temp directory
-   (`dfm-input-XXXXX/input.step`).
-2. Hashes the private copy with SHA-256 (`crypto.subtle.digest`).
-3. If `expected_step_sha256` is provided, compares against the computed value and
-   aborts with `InputArtifactError` on mismatch — before any subprocess starts.
-4. Sets the snapshot to read-only (`chmod 0o400`) so in-process mutation fails.
-5. Returns the computed hash in `input_artifact.sha256`, regardless of whether an
-   expectation was provided.
+| Dependency             | Used by                | Typical install                                                                    |
+| ---------------------- | ---------------------- | ---------------------------------------------------------------------------------- |
+| `gmsh`                 | every registered check | `apt install gmsh` or `brew install gmsh`                                          |
+| `python3` with `numpy` | minimum-thickness only | `apt install python3 python3-numpy` or an activated virtual environment with NumPy |
 
-The hash covers the exact bytes Gmsh will consume, even if the source path is
-concurrently replaced between the call and the snapshot.
-
-## Running
+From a checkout:
 
 ```bash
-# Requires gmsh on PATH and (for thickness) python3+numpy
-deno task serve               # port 3018
+deno task serve
 deno task serve -- --port=3099 --hostname=0.0.0.0
+```
 
-# Quality gate (no gmsh needed)
-deno task release:check       # fmt + check + lint + test (19 unit tests)
+This checkout prepares unpublished `0.2.1`. The last package version published on
+JSR is `0.2.0`; that published runtime still reports identity `0.1.0`:
 
-# Full integration tests (requires gmsh and python3+numpy on PATH)
+```bash
+deno run -A jsr:@casys/mcp-dfm@0.2.0/server --port=3018
+```
+
+Both commands expose stateless HTTP only. For stdio, use the Docker mode above or run
+`scripts/stdio-shim.ts` from a checkout.
+
+## Development
+
+```bash
+deno task release:check
 DFM_RUN_NATIVE=1 deno task test
 ```
 
-## Docker
+`release:check` runs formatting, type checking, linting, non-native tests, and the stdio
+wire tests. Native tests additionally require Gmsh and Python with NumPy.
 
-Port du parc : **3018** (même toolchain que `mcp-calculix` et `mcp-build123d`).
+A workflow publishes a new JSR version only when the version in `deno.json` is not
+already present. A separate workflow publishes the multi-arch GHCR image and creates
+a semantic image tag when a `v*` Git tag is pushed.
 
-```bash
-# Build (arm64 / amd64 selon la plateforme locale)
-docker build -t mcp-dfm:local .
+## Security
 
-# Run — expose le port 3018 localement
-docker run -d --name mcp-dfm -p 3018:3018 mcp-dfm:local
-
-# Smoke test stateless 2026-07-28 (doit lister 3 outils)
-curl -s -X POST http://127.0.0.1:3018/mcp \
-  -H 'Content-Type: application/json' \
-  -H 'Accept: application/json, text/event-stream' \
-  -H 'MCP-Protocol-Version: 2026-07-28' \
-  -H 'Mcp-Method: tools/list' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
-
-docker stop mcp-dfm
-```
-
-Le CMD utilise `--hostname=0.0.0.0` (flag CLI natif du serveur) pour que le port
-soit accessible depuis l'hôte. Les STEP à analyser doivent être montés dans le
-conteneur via `-v /chemin/exports:/exports` et référencés par leur chemin absolu
-dans le conteneur.
-
-## JSR publication
-
-`@casys/mcp-dfm` is published to JSR by Erwan (human action, separate from CI).
-Running `deno publish` from CI or automation is not authorised. The
-`deno task release:check` gate must pass before any publication.
+This server invokes native parsers on caller-supplied files. Keep HTTP bound to loopback
+unless it is protected by an appropriate trusted boundary. See
+[`SECURITY.md`](SECURITY.md) for private vulnerability reporting.
 
 ## License
 

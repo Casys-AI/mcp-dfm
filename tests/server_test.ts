@@ -13,6 +13,7 @@
  */
 
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import denoConfig from "../deno.json" with { type: "json" };
 import { createDfmServer, parseCli } from "../server.ts";
 import {
   computeBoundingBox,
@@ -29,6 +30,7 @@ import type { Triangle } from "../src/api/gmsh.ts";
 import { allTools } from "../src/tools/mod.ts";
 
 const PROTOCOL_VERSION = "2026-07-28";
+const PACKAGE_VERSION = denoConfig.version;
 const META = {
   "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
   "io.modelcontextprotocol/clientCapabilities": {},
@@ -73,7 +75,7 @@ Deno.test("DFM server starts and serves stateless MCP discover/tools/call", asyn
     assertEquals(discovered.response.headers.get("mcp-session-id"), null);
     assertEquals(discovered.body.result.serverInfo, {
       name: "mcp-dfm",
-      version: "0.1.0",
+      version: PACKAGE_VERSION,
     });
 
     // tools/list: the three DFM checks appear
@@ -86,12 +88,17 @@ Deno.test("DFM server starts and serves stateless MCP discover/tools/call", asyn
       "dfm_check_overhangs",
     ]);
 
-    // Each tool declares a closed outputSchema (additionalProperties: false)
-    for (const tool of tools) {
+    // Each tool declares closed input and output schemas
+    for (const listedTool of tools) {
       assertEquals(
-        (tool.outputSchema as Record<string, unknown>).additionalProperties,
+        (listedTool.inputSchema as Record<string, unknown>).additionalProperties,
         false,
-        `${tool.name} outputSchema must be closed`,
+        `${listedTool.name} inputSchema must be closed`,
+      );
+      assertEquals(
+        (listedTool.outputSchema as Record<string, unknown>).additionalProperties,
+        false,
+        `${listedTool.name} outputSchema must be closed`,
       );
     }
   } finally {
