@@ -34,12 +34,8 @@ from the two paths are not interchangeable.
 
 The published image contains Gmsh, Python, and NumPy. A classic stdio MCP host can
 launch it without installing those runtimes on the host machine. The digest below is
-the published multi-architecture 0.2.0 image. Package metadata in that image is
-0.2.0; `server/discover` and health still report the legacy runtime identity 0.1.0.
-This checkout prepares unpublished 0.2.1, which aligns package and server metadata.
-The stricter closed schemas and ordinary-input preflight in 0.2.1 are
-prepared-source/local-image behavior until that version is published; valid 0.2.0
-examples remain usable.
+the published multi-architecture 0.2.1 image. Package metadata and server runtime
+identity in that image are aligned at 0.2.1.
 
 ```json
 {
@@ -52,7 +48,7 @@ examples remain usable.
         "-i",
         "-v",
         "/absolute/path/to/step-files:/data:ro",
-        "ghcr.io/casys-ai/mcp-dfm@sha256:a31aa702e45e4445c67454f807832b60455211664fa98ff36f54948aedec4fb9",
+        "ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c",
         "stdio"
       ]
     }
@@ -77,7 +73,7 @@ The default image mode is stateless HTTP on `/mcp`, port 3018, protocol `2026-07
 docker run --rm \
   -p 127.0.0.1:3018:3018 \
   -v "$PWD/tests/fixtures:/data:ro" \
-  ghcr.io/casys-ai/mcp-dfm@sha256:a31aa702e45e4445c67454f807832b60455211664fa98ff36f54948aedec4fb9
+  ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c
 ```
 
 From a source checkout, this complete call measures the committed 40 × 30 × 20 mm
@@ -141,15 +137,14 @@ consumers should apply tolerances appropriate to their case.
 
 The images are published for `linux/amd64` and `linux/arm64`.
 `ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
-for a version or capability. The digest above is the published 0.2.0 image
-contract; runtime identity from that image still reports 0.1.0.
+for a version or capability. The digest above is the published 0.2.1 image
+contract; package metadata and server runtime identity are aligned at 0.2.1.
 
 ## Tool contracts
 
-Closed schemas and ordinary-input preflight are prepared-source/local-image behavior
-until 0.2.1 is published. In this checkout, every registered input object is closed
-(`additionalProperties: false`). Unknown properties are rejected both by MCP schema
-validation and when a handler is invoked directly. Numeric sizes and dimensions must
+Every registered input object is closed (`additionalProperties: false`). Unknown
+properties are rejected both by MCP schema validation and when a handler is invoked
+directly. Numeric sizes and dimensions must
 be finite and strictly positive: build-volume X/Y/Z, `mesh_size_mm`, optional
 `cluster_radius_mm`, optional `density_kg_m3`, `min_thickness_mm`, and optional
 `timeout_ms`. `sample_count` must be a finite positive integer. `max_overhang_deg`
@@ -267,11 +262,11 @@ deno task serve
 deno task serve -- --port=3099 --hostname=0.0.0.0
 ```
 
-This checkout prepares unpublished `0.2.1`. The last package version published on
-JSR is `0.2.0`; that published runtime still reports identity `0.1.0`:
+The published JSR package is `0.2.1`; package metadata and server runtime identity
+are aligned:
 
 ```bash
-deno run -A jsr:@casys/mcp-dfm@0.2.0/server --port=3018
+deno run -A jsr:@casys/mcp-dfm@0.2.1/server --port=3018
 ```
 
 Both commands expose stateless HTTP only. For stdio, use the Docker mode above or run

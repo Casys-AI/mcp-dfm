@@ -2,13 +2,17 @@
 
 All notable changes to `@casys/mcp-dfm` are documented here.
 
-## 0.2.1 — 2026-08-24
+## 0.2.1 — 2026-08-25
 
 - Closed every registered tool input schema (`additionalProperties: false`). Unknown
   properties, non-finite values, non-positive sizes and dimensions, and a non-integer
   `sample_count` are rejected before the STEP snapshot or any native subprocess.
   `max_overhang_deg` remains 0–90 inclusive; `build_direction` remains a non-zero
   finite three-vector. No manufacturing defaults or maximum caps were added.
+- Published on JSR as `@casys/mcp-dfm@0.2.1`. Package metadata and server runtime
+  identity are aligned at 0.2.1.
+- Multi-architecture GHCR image:
+  `ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c`.
 
 ## 0.2.0
 
