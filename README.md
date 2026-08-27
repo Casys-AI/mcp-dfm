@@ -30,20 +30,23 @@ path is deliberately separate from the older documentary
 the three-axis `build_volume_mm` object, and any downstream bed-contact filter. Results
 from the two paths are not interchangeable.
 
-## Quick start: previously published Docker image over HTTP
+## Quick start: Docker image over HTTP
 
-The previously published image contains Gmsh, Python, and NumPy. The digest below is the
-previously published multi-architecture 0.2.1 image. Package metadata and server runtime
-identity in that image are aligned at 0.2.1.
+The published multi-architecture 0.2.2 release-code image contains Gmsh, Python, and
+NumPy. It is addressed by
+`ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd`,
+is available for `linux/amd64` and `linux/arm64`, and has OCI version `0.2.2` and
+revision `0640ff0775c046159686c20db6e99b654db1c2f2`. Its entrypoint is
+`./docker-entrypoint.sh` and its default command is `http`.
 
 ```bash
 docker run --rm \
   -p 127.0.0.1:3018:3018 \
   -v /absolute/path/to/step-files:/data:ro \
-  ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c
+  ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd http
 ```
 
-The previously published digest's tested MCP interface is stateless HTTP on
+The image's `http` mode provides stateless HTTP on
 `http://127.0.0.1:3018/mcp`, protocol `2026-07-28`. Use paths as seen by the container,
 such as `/data/bracket.step`, not host paths. Docker Desktop must be allowed to share the
 mounted directory where applicable.
@@ -109,10 +112,8 @@ Use `structuredContent` as the machine-readable result. The text `content` is a 
 summary for the model. Floating-point values are not rounded in the wire result, so
 consumers should apply tolerances appropriate to their case.
 
-The previously published image is available for `linux/amd64` and `linux/arm64`.
 `ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
-for a version or capability. The digest above is the published 0.2.1 image
-contract; package metadata and server runtime identity are aligned at 0.2.1.
+for a version or capability. Use the digest above for the published 0.2.2 image.
 
 ## Tool contracts
 
@@ -245,11 +246,9 @@ deno run -A jsr:@casys/mcp-dfm@0.2.2/server --port=3018
 
 The first two commands expose stateless HTTP.
 
-### Native stdio from a checkout, JSR, or local image
+### Native stdio from a checkout, JSR, or published image
 
-Version `0.2.2` provides native stdio. Do not configure the previously published `0.2.1`
-image digest as a native stdio server: its tested interface is stateless HTTP. Use an
-exact entrypoint:
+Version `0.2.2` provides native stdio. Use an exact entrypoint:
 
 ```bash
 # checkout
@@ -259,13 +258,13 @@ deno run -A server.ts --stdio
 deno run -A jsr:@casys/mcp-dfm@0.2.2/server --stdio
 ```
 
-For a local image built from this checkout:
+For native stdio from the published image, pass `stdio` to Docker and keep stdin open
+with `-i`:
 
 ```bash
-docker build -t mcp-dfm:local .
 docker run --rm -i \
   -v /absolute/path/to/step-files:/data:ro \
-  mcp-dfm:local stdio
+  ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd stdio
 ```
 
 ## Development
