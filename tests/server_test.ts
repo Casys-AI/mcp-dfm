@@ -324,19 +324,25 @@ Deno.test("snapshotStepArtifact rejects a malformed expected digest", async () =
 
 // ── CLI parsing ────────────────────────────────────────────────────────────
 
-Deno.test("DFM CLI accepts only stateless HTTP options", () => {
+Deno.test("DFM CLI selects native stdio or stateless HTTP", () => {
   assertEquals(parseCli(["--port", "3018", "--hostname=0.0.0.0"]), {
+    transport: "http",
     port: 3018,
     hostname: "0.0.0.0",
   });
+  assertEquals(parseCli(["--stdio"]), { transport: "stdio" });
   assertThrows(() => parseCli(["--http"]), TypeError, "Unknown argument");
   assertThrows(() => parseCli(["stdio"]), TypeError, "Unknown argument");
-  assertThrows(() => parseCli(["--stdio"]), TypeError, "Unknown argument");
+  assertThrows(() => parseCli(["--stdio", "--port=3018"]), TypeError);
   assertThrows(() => parseCli(["--unknown"]), TypeError, "Unknown argument");
 });
 
 Deno.test("DFM CLI defaults to port 3018 and 127.0.0.1", () => {
-  assertEquals(parseCli([]), { port: 3018, hostname: "127.0.0.1" });
+  assertEquals(parseCli([]), {
+    transport: "http",
+    port: 3018,
+    hostname: "127.0.0.1",
+  });
 });
 
 // ── Native integration tests (require gmsh + python3+numpy on PATH) ────────

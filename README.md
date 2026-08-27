@@ -30,54 +30,28 @@ path is deliberately separate from the older documentary
 the three-axis `build_volume_mm` object, and any downstream bed-contact filter. Results
 from the two paths are not interchangeable.
 
-## Quick start: Docker over stdio
+## Quick start: previously published Docker image over HTTP
 
-The published image contains Gmsh, Python, and NumPy. A classic stdio MCP host can
-launch it without installing those runtimes on the host machine. The digest below is
-the published multi-architecture 0.2.1 image. Package metadata and server runtime
+The previously published image contains Gmsh, Python, and NumPy. The digest below is the
+previously published multi-architecture 0.2.1 image. Package metadata and server runtime
 identity in that image are aligned at 0.2.1.
-
-```json
-{
-  "mcpServers": {
-    "dfm": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "-i",
-        "-v",
-        "/absolute/path/to/step-files:/data:ro",
-        "ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c",
-        "stdio"
-      ]
-    }
-  }
-}
-```
-
-Use paths as seen by the container in tool calls, for example `/data/bracket.step`, not
-the host path. The host directory must be shared with Docker Desktop where applicable.
-Configuration file names vary by MCP host, but the `command` and `args` contract above
-is the tested stdio entrypoint.
-
-The stdio adapter answers the classic MCP `initialize` handshake locally and forwards
-calls to a private stateless HTTP server. It is shipped in the Docker image and source
-checkout; it is not a public JSR export.
-
-## Docker over HTTP
-
-The default image mode is stateless HTTP on `/mcp`, port 3018, protocol `2026-07-28`:
 
 ```bash
 docker run --rm \
   -p 127.0.0.1:3018:3018 \
-  -v "$PWD/tests/fixtures:/data:ro" \
+  -v /absolute/path/to/step-files:/data:ro \
   ghcr.io/casys-ai/mcp-dfm@sha256:a112a2424bf71c018bd1ae9553809dcf990060222b358686b81abb9d23a9290c
 ```
 
-From a source checkout, this complete call measures the committed 40 × 30 × 20 mm
-fixture. `Mcp-Name` must mirror `params.name`:
+The previously published digest's tested MCP interface is stateless HTTP on
+`http://127.0.0.1:3018/mcp`, protocol `2026-07-28`. Use paths as seen by the container,
+such as `/data/bracket.step`, not host paths. Docker Desktop must be allowed to share the
+mounted directory where applicable.
+
+## HTTP call example
+
+The following source-checkout call measures the committed 40 × 30 × 20 mm fixture.
+`Mcp-Name` must mirror `params.name`:
 
 ```bash
 curl -sS -X POST http://127.0.0.1:3018/mcp \
@@ -135,7 +109,7 @@ Use `structuredContent` as the machine-readable result. The text `content` is a 
 summary for the model. Floating-point values are not rounded in the wire result, so
 consumers should apply tolerances appropriate to their case.
 
-The images are published for `linux/amd64` and `linux/arm64`.
+The previously published image is available for `linux/amd64` and `linux/arm64`.
 `ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
 for a version or capability. The digest above is the published 0.2.1 image
 contract; package metadata and server runtime identity are aligned at 0.2.1.
@@ -262,15 +236,37 @@ deno task serve
 deno task serve -- --port=3099 --hostname=0.0.0.0
 ```
 
-The published JSR package is `0.2.1`; package metadata and server runtime identity
-are aligned:
+Version `0.2.2` provides both stateless HTTP and native stdio. For stateless HTTP through
+the JSR package:
 
 ```bash
-deno run -A jsr:@casys/mcp-dfm@0.2.1/server --port=3018
+deno run -A jsr:@casys/mcp-dfm@0.2.2/server --port=3018
 ```
 
-Both commands expose stateless HTTP only. For stdio, use the Docker mode above or run
-`scripts/stdio-shim.ts` from a checkout.
+The first two commands expose stateless HTTP.
+
+### Native stdio from a checkout, JSR, or local image
+
+Version `0.2.2` provides native stdio. Do not configure the previously published `0.2.1`
+image digest as a native stdio server: its tested interface is stateless HTTP. Use an
+exact entrypoint:
+
+```bash
+# checkout
+deno run -A server.ts --stdio
+
+# JSR 0.2.2
+deno run -A jsr:@casys/mcp-dfm@0.2.2/server --stdio
+```
+
+For a local image built from this checkout:
+
+```bash
+docker build -t mcp-dfm:local .
+docker run --rm -i \
+  -v /absolute/path/to/step-files:/data:ro \
+  mcp-dfm:local stdio
+```
 
 ## Development
 

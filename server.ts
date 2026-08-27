@@ -3,7 +3,7 @@
 import { McpApp } from "@casys/mcp-server";
 import { DfmToolsClient } from "./src/client.ts";
 
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 const DEFAULT_PORT = 3018;
 const DEFAULT_HOSTNAME = "127.0.0.1";
 
@@ -39,25 +39,35 @@ export function createDfmServer(
 if (import.meta.main) {
   const cli = parseCli(Deno.args);
   const { app } = createDfmServer();
-  await app.startHttp({
-    port: cli.port,
-    hostname: cli.hostname,
-    corsOrigins: ["http://127.0.0.1", "http://localhost"],
-    onListen: ({ hostname, port }) => {
-      console.error(
-        `[mcp-dfm] Stateless MCP: http://${hostname}:${port}/mcp`,
-      );
-    },
-  });
+  if (cli.transport === "stdio") {
+    await app.start();
+  } else {
+    await app.startHttp({
+      port: cli.port,
+      hostname: cli.hostname,
+      corsOrigins: ["http://127.0.0.1", "http://localhost"],
+      onListen: ({ hostname, port }) => {
+        console.error(
+          `[mcp-dfm] Stateless MCP: http://${hostname}:${port}/mcp`,
+        );
+      },
+    });
+  }
 }
 
-export interface CliOptions {
-  port: number;
-  hostname: string;
-}
+export type CliOptions =
+  | { transport: "stdio" }
+  | { transport: "http"; port: number; hostname: string };
 
-/** Parse the deliberately small stateless HTTP command surface. */
+/** Parse the deliberately small native-stdio or stateless-HTTP command surface. */
 export function parseCli(args: readonly string[]): CliOptions {
+  if (args.includes("--stdio")) {
+    if (args.length !== 1) {
+      throw new TypeError("--stdio cannot be combined with HTTP options");
+    }
+    return { transport: "stdio" };
+  }
+
   let port = integerEnv("MCP_PORT") ?? DEFAULT_PORT;
   let hostname = env("MCP_HOSTNAME") ?? DEFAULT_HOSTNAME;
   for (let index = 0; index < args.length; index++) {
@@ -74,7 +84,7 @@ export function parseCli(args: readonly string[]): CliOptions {
       throw new TypeError(`Unknown argument '${argument}'.`);
     }
   }
-  return { port, hostname };
+  return { transport: "http", port, hostname };
 }
 
 function positivePort(value: string | undefined, name: string): number {

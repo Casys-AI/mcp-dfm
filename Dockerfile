@@ -30,12 +30,11 @@ COPY deno.json deno.lock ./
 # Copy all source needed for deno cache (local imports must resolve).
 COPY mod.ts server.ts ./
 COPY src/ ./src/
-COPY scripts/ ./scripts/
 COPY docker-entrypoint.sh ./
 
 # Pre-cache all JSR/remote dependencies using the committed lockfile.
 # The container starts without network access to registries.
-RUN deno cache --lock=deno.lock server.ts mod.ts scripts/stdio-shim.ts
+RUN deno cache --lock=deno.lock server.ts mod.ts
 
 EXPOSE 3018
 

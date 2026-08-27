@@ -2,6 +2,14 @@
 
 All notable changes to `@casys/mcp-dfm` are documented here.
 
+## Unreleased
+
+## 0.2.2 — 2026-08-27
+
+- Replaced the duplicate stdio-to-HTTP adapter with the era-aware native stdio transport
+  from `@casys/mcp-server@0.26.1`. End-to-end coverage verifies a legacy `2025-06-18`
+  `initialize` followed by a tool call that reaches schema validation.
+
 ## 0.2.1 — 2026-08-25
 
 - Closed every registered tool input schema (`additionalProperties: false`). Unknown
