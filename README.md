@@ -65,7 +65,7 @@ completes, use the versioned image and pin the GHCR digest in a deployment manif
 docker run --rm \
   -p 127.0.0.1:3018:3018 \
   -v /absolute/path/to/step-files:/data:ro \
-  ghcr.io/casys-ai/mcp-dfm:0.3.0 http
+  ghcr.io/casys-ai/mcp-dfm@sha256:fd161cfd936773fa551e281d1ae371f7edc544f996eb966e6466d5ff49f384f5 http
 ```
 
 The image's `http` mode provides stateless HTTP on
@@ -303,7 +303,7 @@ with `-i`:
 ```bash
 docker run --rm -i \
   -v /absolute/path/to/step-files:/data:ro \
-  ghcr.io/casys-ai/mcp-dfm:0.3.0 stdio
+  ghcr.io/casys-ai/mcp-dfm@sha256:fd161cfd936773fa551e281d1ae371f7edc544f996eb966e6466d5ff49f384f5 stdio
 ```
 
 ## Development
