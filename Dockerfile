@@ -1,7 +1,7 @@
 # mcp-dfm — Stateless MCP server for DFM geometry checks (port 3018).
 #
 # Runtime deps:
-#   - gmsh     : STEP → surface STL tessellation (all three tools)
+#   - gmsh     : STEP → surface STL tessellation for geometry checks
 #   - python3  : thickness ray-casting script (dfm_check_min_thickness only)
 #   - python3-numpy : Möller-Trumbore intersection (no trimesh)
 #
