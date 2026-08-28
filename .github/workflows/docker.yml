@@ -9,8 +9,13 @@ on:
   workflow_dispatch:
 
 jobs:
+  quality:
+    uses: ./.github/workflows/quality.yml
+
   validate-release-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       package_version: ${{ steps.package.outputs.version }}
     steps:
@@ -32,18 +37,8 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Install native DFM dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gmsh python3 python3-numpy
-
-      - name: Verify native release gates
-        env:
-          DFM_RUN_NATIVE: "1"
-        run: deno task release:check
-
   build-push:
-    needs: validate-release-version
+    needs: [quality, validate-release-version]
     runs-on: ubuntu-latest
     permissions:
       contents: read

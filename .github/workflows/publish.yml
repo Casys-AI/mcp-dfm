@@ -6,27 +6,11 @@ on:
       - main
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Install native DFM dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gmsh python3 python3-numpy
-
-      - name: Verify release gates
-        env:
-          DFM_RUN_NATIVE: "1"
-        run: deno task release:check
+  quality:
+    uses: ./.github/workflows/quality.yml
 
   publish-jsr:
-    needs: check
+    needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: read

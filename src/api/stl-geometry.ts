@@ -365,9 +365,9 @@ export function cross(
  * Angle in degrees between the outward face normal and the downward direction
  * (-build_direction). This is the "overhang angle" used by DFM tools:
  *
- *   0°  → face points straight down  (worst overhang, always needs support)
- *  90°  → face is vertical           (no overhang from below)
- * 180°  → face points straight up    (self-supporting)
+ *   0°  → face points straight down
+ *  90°  → face is vertical
+ * 180°  → face points straight up
  *
  * A face with overhang angle < threshold is reported against that caller-declared limit.
  */

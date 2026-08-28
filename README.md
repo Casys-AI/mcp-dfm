@@ -314,8 +314,10 @@ DFM_RUN_NATIVE=1 deno task test
 ```
 
 `release:check` runs formatting, type checking, linting, non-native tests, and the stdio
-wire tests. The JSR publication gate installs Gmsh and Python with NumPy, then reruns the
-same gate with `DFM_RUN_NATIVE=1` before publication.
+wire tests. The reusable CI quality workflow runs that fast job without `DFM_RUN_NATIVE`;
+its native job installs Gmsh, Python, and NumPy, then runs
+`DFM_RUN_NATIVE=1 deno task test`. A pull-request workflow calls the same quality workflow,
+which must complete before JSR publication or GHCR image build and push.
 
 A workflow publishes a new JSR version only when the version in `deno.json` is not
 already present. A separate workflow publishes the multi-arch GHCR image; a semantic

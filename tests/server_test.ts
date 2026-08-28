@@ -7,9 +7,8 @@
  * - Input artifact attestation (snapshot, digest enforcement).
  * - CLI parsing.
  *
- * Tests requiring gmsh or python3+numpy are guarded by environment variables:
- *   DFM_RUN_GMSH=1   — enable tests that invoke Gmsh.
- *   DFM_RUN_NATIVE=1 — enable full integration tests against real fixtures.
+ * Tests requiring native tools are guarded by DFM_RUN_NATIVE=1, which enables
+ * full integration tests against real fixtures.
  */
 
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
@@ -572,7 +571,7 @@ Deno.test({
       build_direction: [0, 0, 1],
       max_overhang_deg: 45,
       mesh_size_mm: 3,
-    }) as { structuredContent: Record<string, unknown> };
+    }) as { content: string; structuredContent: Record<string, unknown> };
     const sc = result.structuredContent;
     const measured = sc.measured as {
       overhang_area_mm2: number;
@@ -588,20 +587,25 @@ Deno.test({
       (sc.violations as unknown[]).length > 0,
       "Expected at least one violation zone",
     );
+    assert(
+      result.content.includes("below the declared overhang threshold"),
+      "Expected the public summary to report only a declared-threshold crossing",
+    );
+    assert(
+      !result.content.toLowerCase().includes("requires support"),
+      "Public summary must not make a support-requirement verdict",
+    );
   },
 });
 
 Deno.test({
-  name: "dfm_check_overhangs finds no violations on healthy box with large threshold",
+  name: "dfm_check_overhangs preserves structural output for an unfiltered healthy box",
   ignore: !RUN_NATIVE,
   fn: async () => {
     const tool = allTools.find((t) => t.name === "dfm_check_overhangs");
     assert(tool);
-    // At 0° threshold, only perfectly horizontal downward faces are violations.
-    // A box has one such face (bottom); allow the test to pass if violations == 0
-    // (the bottom face IS the print bed and is considered "supported").
-    // Since we do NOT filter the bed face, violations > 0 is expected — but
-    // this test verifies the check runs without error.
+    // The provider does not identify or exclude a bed-contact plane. This test
+    // verifies that the unfiltered result has the expected structural fields.
     const result = await tool.handler({
       step_path: HEALTHY_BOX_STEP,
       build_direction: [0, 0, 1],
