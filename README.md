@@ -9,7 +9,7 @@ or threshold.
 
 | Tool                      | What it measures                                                  | Caller-declared comparison                                  |
 | ------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
-| `dfm_check_envelope`      | Axis-aligned X/Y/Z extents, closed-mesh volume, and optional mass | `build_volume_mm: { x, y, z }` and optional `density_kg_m3` |
+| `dfm_check_envelope`      | Axis-aligned X/Y/Z extents, surface-mesh volume status, optional mass | `build_volume_mm: { x, y, z }` and optional `density_kg_m3` |
 | `dfm_check_overhangs`     | Downward-facing triangle area and spatial zones                   | `build_direction` and `max_overhang_deg`                    |
 | `dfm_check_min_thickness` | Sampled inward-normal wall thickness and thin zones               | `min_thickness_mm`                                          |
 
@@ -30,20 +30,42 @@ path is deliberately separate from the older documentary
 the three-axis `build_volume_mm` object, and any downstream bed-contact filter. Results
 from the two paths are not interchangeable.
 
+## Mesh evidence and bounded measurement states
+
+Every result includes `mesh_topology` for the particular Gmsh surface mesh consumed by
+that call: `closed`, `watertight`, `manifold`, `orientation_consistent`, connected
+component count, and the detected boundary, non-manifold, and degenerate counts. These
+are properties of the emitted triangle mesh, not a claim that the source CAD is valid or
+that a part is manufacturable. `manifold` checks both edge uses and each vertex link;
+`watertight` is true only when that mesh is closed, manifold, consistently oriented, and
+has no degenerate triangles.
+
+`dfm_check_envelope` always returns the numerical divergence-theorem result, but sets
+`measured.volume_status` to `computed` only for one connected watertight shell. Its
+absolute value is invariant if that one shell is globally reversed, and no second shell
+exists whose nesting could change the material volume. Multiple closed components remain
+`unverified`: this server does not infer their relative orientation or nesting. Derived
+`mass_kg` is emitted only when a caller supplies density and that volume status is
+`computed`; otherwise `mass_status` is `not_requested` or `unverified`.
+
+`dfm_check_min_thickness` also returns `ray_coverage`: the sampled triangle centres, rays
+that found an opposing surface, unresolved rays, and whether coverage is complete.
+`minimum_thickness_status` is `unverified` unless the mesh is watertight and every sampled
+ray completed. A `sampled` result is still an inward-normal sample, not a proof of the
+global minimum wall thickness.
+
 ## Quick start: Docker image over HTTP
 
-The published multi-architecture 0.2.2 release-code image contains Gmsh, Python, and
-NumPy. It is addressed by
-`ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd`,
-is available for `linux/amd64` and `linux/arm64`, and has OCI version `0.2.2` and
-revision `0640ff0775c046159686c20db6e99b654db1c2f2`. Its entrypoint is
-`./docker-entrypoint.sh` and its default command is `http`.
+Version `0.3.0` packages Gmsh, Python, and NumPy for `linux/amd64` and `linux/arm64`.
+The Docker workflow derives its OCI version from `deno.json` and accepts a semantic image
+tag only when the pushed Git tag is exactly `v0.3.0`. After that release workflow
+completes, use the versioned image and pin the GHCR digest in a deployment manifest.
 
 ```bash
 docker run --rm \
   -p 127.0.0.1:3018:3018 \
   -v /absolute/path/to/step-files:/data:ro \
-  ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd http
+  ghcr.io/casys-ai/mcp-dfm:0.3.0 http
 ```
 
 The image's `http` mode provides stateless HTTP on
@@ -94,7 +116,20 @@ The measured result includes:
     "y_mm": 30,
     "z_mm": 20,
     "volume_mm3": 23999.999999999967,
+    "volume_status": "computed",
+    "mass_status": "computed",
     "mass_kg": 0.06479999999999991
+  },
+  "mesh_topology": {
+    "closed": true,
+    "watertight": true,
+    "manifold": true,
+    "orientation_consistent": true,
+    "connected_component_count": 1,
+    "boundary_edge_count": 0,
+    "non_manifold_edge_count": 0,
+    "non_manifold_vertex_count": 0,
+    "degenerate_triangle_count": 0
   },
   "limits_declared": {
     "build_volume_mm": { "x": 200, "y": 200, "z": 200 },
@@ -113,7 +148,8 @@ summary for the model. Floating-point values are not rounded in the wire result,
 consumers should apply tolerances appropriate to their case.
 
 `ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
-for a version or capability. Use the digest above for the published 0.2.2 image.
+for a version or capability. Resolve the `0.3.0` image to its GHCR digest for a pinned
+deployment.
 
 ## Tool contracts
 
@@ -145,8 +181,9 @@ when density is supplied:
 | `timeout_ms`           | no       | Finite strictly positive Gmsh subprocess timeout in ms; default 60000                        |
 
 The comparison is axis by axis in the STEP coordinate system. The tool does not rotate
-the part to find a tighter fit. Volume assumes a closed surface; open shells can produce
-an inaccurate value rather than a valid solid volume.
+the part to find a tighter fit. A numerical `volume_mm3` is kept for diagnosis, but it is
+explicitly `unverified` unless the returned mesh topology establishes one connected
+watertight shell; derived mass is withheld on that condition.
 
 Measured native fixture result at `mesh_size_mm: 5`: 40.0 × 30.0 × 20.0 mm and
 approximately 24000.0 mm³.
@@ -200,8 +237,10 @@ declared threshold.
 | `timeout_ms`           | no       | Finite strictly positive total Gmsh and Python timeout in ms; default 120000  |
 
 This is sampled inward-normal thickness, not a global exact minimum-distance proof.
-Sampling can miss a small or diagonal thin region, and the method assumes a closed
-watertight surface. It does not apply FDM, SLA, SLS, or material-specific feature rules.
+Sampling can miss a small or diagonal thin region. The result reports the exact mesh
+topology and ray coverage it obtained; `minimum_thickness_status` is `unverified` when
+the mesh is not watertight or any sampled ray did not reach an opposing surface. It does
+not apply FDM, SLA, SLS, or material-specific feature rules.
 
 Measured thin-wall fixture result at `mesh_size_mm: 0.5`, `sample_count: 300`, and
 threshold 1.0 mm: minimum 0.8000 mm and 12 sampled violations.
@@ -237,25 +276,25 @@ deno task serve
 deno task serve -- --port=3099 --hostname=0.0.0.0
 ```
 
-Version `0.2.2` provides both stateless HTTP and native stdio. For stateless HTTP through
+Version `0.3.0` provides both stateless HTTP and native stdio. For stateless HTTP through
 the JSR package:
 
 ```bash
-deno run -A jsr:@casys/mcp-dfm@0.2.2/server --port=3018
+deno run -A jsr:@casys/mcp-dfm@0.3.0/server --port=3018
 ```
 
 The first two commands expose stateless HTTP.
 
 ### Native stdio from a checkout, JSR, or published image
 
-Version `0.2.2` provides native stdio. Use an exact entrypoint:
+Version `0.3.0` provides native stdio. Use an exact entrypoint:
 
 ```bash
 # checkout
 deno run -A server.ts --stdio
 
-# JSR 0.2.2
-deno run -A jsr:@casys/mcp-dfm@0.2.2/server --stdio
+# JSR 0.3.0
+deno run -A jsr:@casys/mcp-dfm@0.3.0/server --stdio
 ```
 
 For native stdio from the published image, pass `stdio` to Docker and keep stdin open
@@ -264,7 +303,7 @@ with `-i`:
 ```bash
 docker run --rm -i \
   -v /absolute/path/to/step-files:/data:ro \
-  ghcr.io/casys-ai/mcp-dfm@sha256:a15b215ae8d3bbe1425cc9a46d9fef32d1950ad690ac4e09e9d4a8f7475a34cd stdio
+  ghcr.io/casys-ai/mcp-dfm:0.3.0 stdio
 ```
 
 ## Development
@@ -275,11 +314,12 @@ DFM_RUN_NATIVE=1 deno task test
 ```
 
 `release:check` runs formatting, type checking, linting, non-native tests, and the stdio
-wire tests. Native tests additionally require Gmsh and Python with NumPy.
+wire tests. The JSR publication gate installs Gmsh and Python with NumPy, then reruns the
+same gate with `DFM_RUN_NATIVE=1` before publication.
 
 A workflow publishes a new JSR version only when the version in `deno.json` is not
-already present. A separate workflow publishes the multi-arch GHCR image and creates
-a semantic image tag when a `v*` Git tag is pushed.
+already present. A separate workflow publishes the multi-arch GHCR image; a semantic
+image tag is accepted only when it matches that package version.
 
 ## Security
 

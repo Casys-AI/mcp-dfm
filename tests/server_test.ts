@@ -16,9 +16,11 @@ import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import denoConfig from "../deno.json" with { type: "json" };
 import { createDfmServer, parseCli } from "../server.ts";
 import {
+  analyzeMeshTopology,
   computeBoundingBox,
   computeVolumeMm3,
   dot,
+  hasSingleShellVolumeEvidence,
   normalize,
   overhangAngleDeg,
   triangleArea,
@@ -129,6 +131,59 @@ Deno.test("All DFM tools declare closed outputSchemas with required not_checked"
       required.includes("input_artifact"),
       `${tool.name}: outputSchema.required must include 'input_artifact'`,
     );
+    assert(
+      required.includes("mesh_topology"),
+      `${tool.name}: outputSchema.required must include 'mesh_topology'`,
+    );
+    const topology = (schema.properties as Record<string, unknown>)
+      .mesh_topology as Record<string, unknown>;
+    assertEquals(topology.additionalProperties, false);
+    assertEquals(topology.required, [
+      "closed",
+      "watertight",
+      "manifold",
+      "orientation_consistent",
+      "connected_component_count",
+      "boundary_edge_count",
+      "non_manifold_edge_count",
+      "non_manifold_vertex_count",
+      "degenerate_triangle_count",
+    ]);
+
+    if (tool.name === "dfm_check_envelope") {
+      const measured = (schema.properties as Record<string, unknown>)
+        .measured as Record<string, unknown>;
+      const measuredProperties = measured.properties as Record<
+        string,
+        Record<string, unknown>
+      >;
+      assertEquals(measuredProperties.volume_status.enum, ["computed", "unverified"]);
+      assertEquals(measuredProperties.mass_status.enum, [
+        "not_requested",
+        "computed",
+        "unverified",
+      ]);
+    }
+
+    if (tool.name === "dfm_check_min_thickness") {
+      assert(
+        required.includes("ray_coverage"),
+        "dfm_check_min_thickness: outputSchema.required must include 'ray_coverage'",
+      );
+      const rayCoverage = (schema.properties as Record<string, unknown>)
+        .ray_coverage as Record<string, unknown>;
+      assertEquals(rayCoverage.additionalProperties, false);
+      const measured = (schema.properties as Record<string, unknown>)
+        .measured as Record<string, unknown>;
+      const measuredProperties = measured.properties as Record<
+        string,
+        Record<string, unknown>
+      >;
+      assertEquals(measuredProperties.minimum_thickness_status.enum, [
+        "sampled",
+        "unverified",
+      ]);
+    }
   }
 });
 
@@ -173,6 +228,117 @@ Deno.test("computeVolumeMm3 is exact for a tetrahedron", () => {
     Math.abs(vol - 1 / 6) < 1e-10,
     `Expected ~${1 / 6}, got ${vol}`,
   );
+});
+
+Deno.test("analyzeMeshTopology attests a consistently oriented closed tetrahedron", () => {
+  const tetrahedron: Triangle[] = [
+    { normal: [0, 0, -1], vertices: [[0, 0, 0], [0, 1, 0], [1, 0, 0]] },
+    { normal: [-1, 0, 0], vertices: [[0, 0, 0], [0, 0, 1], [0, 1, 0]] },
+    { normal: [0, -1, 0], vertices: [[0, 0, 0], [1, 0, 0], [0, 0, 1]] },
+    { normal: [1, 1, 1], vertices: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
+  ];
+
+  assertEquals(analyzeMeshTopology(tetrahedron), {
+    closed: true,
+    watertight: true,
+    manifold: true,
+    orientation_consistent: true,
+    connected_component_count: 1,
+    boundary_edge_count: 0,
+    non_manifold_edge_count: 0,
+    non_manifold_vertex_count: 0,
+    degenerate_triangle_count: 0,
+  });
+
+  const twoSeparatedSolids = [
+    ...tetrahedron,
+    ...tetrahedron.map((triangle) => ({
+      ...triangle,
+      vertices: triangle.vertices.map((
+        [x, y, z],
+      ) => [x + 3, y, z]) as Triangle["vertices"],
+    })),
+  ];
+  const disconnected = analyzeMeshTopology(twoSeparatedSolids);
+  assertEquals(disconnected.connected_component_count, 2);
+  assertEquals(disconnected.watertight, true);
+  assertEquals(hasSingleShellVolumeEvidence(disconnected), false);
+});
+
+Deno.test("single-shell volume evidence rejects globally inverted disconnected shells", () => {
+  const tetrahedron: Triangle[] = [
+    { normal: [0, 0, -1], vertices: [[0, 0, 0], [0, 1, 0], [1, 0, 0]] },
+    { normal: [-1, 0, 0], vertices: [[0, 0, 0], [0, 0, 1], [0, 1, 0]] },
+    { normal: [0, -1, 0], vertices: [[0, 0, 0], [1, 0, 0], [0, 0, 1]] },
+    { normal: [1, 1, 1], vertices: [[1, 0, 0], [0, 1, 0], [0, 0, 1]] },
+  ];
+  const globallyInvertedOffsetTetrahedron = tetrahedron.map((triangle) => ({
+    normal: triangle.normal.map((coordinate) => -coordinate) as Triangle["normal"],
+    vertices: [
+      triangle.vertices[0].map((coordinate, axis) =>
+        coordinate + (axis === 0 ? 3 : 0)
+      ) as [number, number, number],
+      triangle.vertices[2].map((coordinate, axis) =>
+        coordinate + (axis === 0 ? 3 : 0)
+      ) as [number, number, number],
+      triangle.vertices[1].map((coordinate, axis) =>
+        coordinate + (axis === 0 ? 3 : 0)
+      ) as [number, number, number],
+    ] as Triangle["vertices"],
+  }));
+  const mixedGlobalOrientation = [
+    ...tetrahedron,
+    ...globallyInvertedOffsetTetrahedron,
+  ];
+
+  const topology = analyzeMeshTopology(mixedGlobalOrientation);
+  assertEquals(topology.watertight, true);
+  assertEquals(topology.connected_component_count, 2);
+  assertEquals(computeVolumeMm3(mixedGlobalOrientation), 0);
+  assertEquals(
+    hasSingleShellVolumeEvidence(topology),
+    false,
+    "multi-shell meshes remain unverified because their global orientation/nesting is not proven",
+  );
+});
+
+Deno.test("analyzeMeshTopology separates boundary, orientation, and manifold failures", () => {
+  const openTriangle: Triangle[] = [{
+    normal: [0, 0, 1],
+    vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+  }];
+  const open = analyzeMeshTopology(openTriangle);
+  assertEquals(open.closed, false);
+  assertEquals(open.watertight, false);
+  assertEquals(open.manifold, true);
+  assertEquals(open.boundary_edge_count, 3);
+  assertEquals(open.connected_component_count, 1);
+
+  const nonManifold = analyzeMeshTopology([
+    ...openTriangle,
+    {
+      normal: [0, 1, 0] as [number, number, number],
+      vertices: [[0, 0, 0], [1, 0, 0], [0, 0, 1]] as Triangle["vertices"],
+    },
+    {
+      normal: [0, -1, 0] as [number, number, number],
+      vertices: [[0, 0, 0], [1, 0, 0], [0, 0, -1]] as Triangle["vertices"],
+    },
+  ]);
+  assertEquals(nonManifold.manifold, false);
+  assertEquals(nonManifold.non_manifold_edge_count, 1);
+
+  const flippedFace: Triangle[] = [
+    { normal: [0, 0, -1], vertices: [[0, 0, 0], [0, 1, 0], [1, 0, 0]] },
+    { normal: [-1, 0, 0], vertices: [[0, 0, 0], [0, 0, 1], [0, 1, 0]] },
+    { normal: [0, -1, 0], vertices: [[0, 0, 0], [1, 0, 0], [0, 0, 1]] },
+    { normal: [1, 1, 1], vertices: [[0, 0, 1], [0, 1, 0], [1, 0, 0]] },
+  ];
+  const inconsistent = analyzeMeshTopology(flippedFace);
+  assertEquals(inconsistent.closed, true);
+  assertEquals(inconsistent.manifold, true);
+  assertEquals(inconsistent.orientation_consistent, false);
+  assertEquals(inconsistent.watertight, false);
 });
 
 Deno.test("triangleArea is half the cross product magnitude", () => {
@@ -365,6 +531,7 @@ Deno.test({
       y_mm: number;
       z_mm: number;
       volume_mm3: number;
+      volume_status: "computed" | "unverified";
     };
     // Real pipeline (gmsh mesh_size=5): bbox is exact (40.0 × 30.0 × 20.0),
     // volume is exact 24000.0 mm³ via divergence theorem on a closed mesh.
@@ -372,6 +539,7 @@ Deno.test({
     assert(Math.abs(measured.y_mm - 30) < 0.1);
     assert(Math.abs(measured.z_mm - 20) < 0.1);
     assert(Math.abs(measured.volume_mm3 - 24000) < 10);
+    assertEquals(measured.volume_status, "computed");
   },
 });
 
@@ -464,14 +632,39 @@ Deno.test({
     }) as { structuredContent: Record<string, unknown> };
     const sc = result.structuredContent;
     const measured = sc.measured as {
-      min_thickness_mm: number;
+      min_thickness_mm: number | null;
       valid_ray_count: number;
+      minimum_thickness_status: "sampled" | "unverified";
     };
+    const rayCoverage = sc.ray_coverage as {
+      sampled_triangle_count: number;
+      valid_ray_count: number;
+      unresolved_ray_count: number;
+      complete: boolean;
+    };
+    assertEquals(measured.minimum_thickness_status, "sampled");
+    assert(
+      rayCoverage.sampled_triangle_count > 0,
+      "Expected at least one sampled triangle before comparing thickness",
+    );
+    assertEquals(rayCoverage.complete, true);
+    assertEquals(rayCoverage.unresolved_ray_count, 0);
+    assertEquals(
+      rayCoverage.valid_ray_count,
+      rayCoverage.sampled_triangle_count,
+      "Expected complete ray coverage before comparing thickness",
+    );
+    assertEquals(measured.valid_ray_count, rayCoverage.valid_ray_count);
+    const minThickness = measured.min_thickness_mm;
+    assert(
+      typeof minThickness === "number",
+      "Expected a sampled numeric minimum thickness",
+    );
     // Real pipeline (gmsh 0.5 mm, 300 samples): min_thickness = 0.8000 mm exact.
     // 12 violations under the 1 mm threshold.
     assert(
-      measured.min_thickness_mm < 1.0,
-      `Expected min thickness < 1 mm, got ${measured.min_thickness_mm}`,
+      minThickness < 1.0,
+      `Expected min thickness < 1 mm, got ${minThickness}`,
     );
     assert(
       (sc.violations as unknown[]).length > 0,
@@ -493,11 +686,33 @@ Deno.test({
       sample_count: 200,
     }) as { structuredContent: Record<string, unknown> };
     const sc = result.structuredContent;
-    const measured = sc.measured as { min_thickness_mm: number };
+    const measured = sc.measured as {
+      min_thickness_mm: number | null;
+      minimum_thickness_status: "sampled" | "unverified";
+    };
+    const rayCoverage = sc.ray_coverage as {
+      sampled_triangle_count: number;
+      valid_ray_count: number;
+      unresolved_ray_count: number;
+      complete: boolean;
+    };
+    assertEquals(measured.minimum_thickness_status, "sampled");
+    assert(
+      rayCoverage.sampled_triangle_count > 0,
+      "Expected at least one sampled triangle before comparing thickness",
+    );
+    assertEquals(rayCoverage.complete, true);
+    assertEquals(rayCoverage.unresolved_ray_count, 0);
+    assertEquals(rayCoverage.valid_ray_count, rayCoverage.sampled_triangle_count);
+    const minThickness = measured.min_thickness_mm;
+    assert(
+      typeof minThickness === "number",
+      "Expected a sampled numeric minimum thickness",
+    );
     // Solid box, thinnest dimension is 20 mm; no violations under 5 mm threshold
     assert(
-      measured.min_thickness_mm > 5,
-      `Expected min thickness > 5 mm, got ${measured.min_thickness_mm}`,
+      minThickness > 5,
+      `Expected min thickness > 5 mm, got ${minThickness}`,
     );
     assertEquals((sc.violations as unknown[]).length, 0);
   },

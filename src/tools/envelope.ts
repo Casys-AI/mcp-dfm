@@ -12,8 +12,14 @@
 
 import type { DfmTool } from "./types.ts";
 import { GmshNotFoundError, tessellateStep, TessellationError } from "../api/gmsh.ts";
-import { computeBoundingBox, computeVolumeMm3 } from "../api/stl-geometry.ts";
+import {
+  analyzeMeshTopology,
+  computeBoundingBox,
+  computeVolumeMm3,
+  hasSingleShellVolumeEvidence,
+} from "../api/stl-geometry.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import { MESH_TOPOLOGY_SCHEMA } from "./mesh-topology.ts";
 import {
   rejectUnknownArgs,
   requireBuildVolume,
@@ -29,7 +35,7 @@ const NOT_CHECKED = [
   "Part orientation is not optimised — the bounding box is axis-aligned with the STEP coordinate system; the tightest-fitting orientation is not computed.",
   "Support structure volume is not included in the envelope.",
   "Mass is not reported when density_kg_m3 is omitted.",
-  "The volume computation assumes a closed (watertight) surface mesh; open shells yield an inaccurate result.",
+  "volume_status is unverified unless the emitted surface mesh is one connected watertight shell; this server does not prove relative orientation or nesting across multiple shells.",
 ];
 
 const OUTPUT_SCHEMA: Record<string, unknown> = {
@@ -38,6 +44,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
   required: [
     "violations",
     "measured",
+    "mesh_topology",
     "limits_declared",
     "not_checked",
     "input_artifact",
@@ -59,15 +66,28 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
     measured: {
       type: "object",
       additionalProperties: false,
-      required: ["x_mm", "y_mm", "z_mm", "volume_mm3"],
+      required: [
+        "x_mm",
+        "y_mm",
+        "z_mm",
+        "volume_mm3",
+        "volume_status",
+        "mass_status",
+      ],
       properties: {
         x_mm: { type: "number" },
         y_mm: { type: "number" },
         z_mm: { type: "number" },
         volume_mm3: { type: "number" },
+        volume_status: { type: "string", enum: ["computed", "unverified"] },
         mass_kg: { type: "number" },
+        mass_status: {
+          type: "string",
+          enum: ["not_requested", "computed", "unverified"],
+        },
       },
     },
+    mesh_topology: MESH_TOPOLOGY_SCHEMA,
     limits_declared: {
       type: "object",
       additionalProperties: false,
@@ -114,7 +134,9 @@ export const envelopeTools: DfmTool[] = [
       "Requires gmsh on PATH (`apt install gmsh` / `brew install gmsh`). " +
       "Units: mm, kg. " +
       "NOT CHECKED: part orientation is not optimised; support volume not included; " +
-      "mass omitted without density_kg_m3; volume inaccurate for open shells.",
+      "mass omitted without density_kg_m3; volume and derived mass are marked " +
+      "unverified unless the tessellated mesh is one connected watertight shell; " +
+      "relative orientation or nesting across multiple shells is not inferred.",
     category: "envelope",
     annotations: {
       readOnlyHint: true,
@@ -246,6 +268,10 @@ export const envelopeTools: DfmTool[] = [
         const bbox = computeBoundingBox(tess.triangles);
         const [xMm, yMm, zMm] = bbox.size;
         const volumeMm3 = computeVolumeMm3(tess.triangles);
+        const meshTopology = analyzeMeshTopology(tess.triangles);
+        const volumeStatus = hasSingleShellVolumeEvidence(meshTopology)
+          ? "computed"
+          : "unverified";
 
         const violations: Array<{
           axis: "x" | "y" | "z";
@@ -274,13 +300,15 @@ export const envelopeTools: DfmTool[] = [
           });
         }
 
-        const measured: Record<string, number> = {
+        const measured: Record<string, number | string> = {
           x_mm: xMm,
           y_mm: yMm,
           z_mm: zMm,
           volume_mm3: volumeMm3,
+          volume_status: volumeStatus,
+          mass_status: densityKgM3 === undefined ? "not_requested" : volumeStatus,
         };
-        if (densityKgM3 !== undefined) {
+        if (densityKgM3 !== undefined && volumeStatus === "computed") {
           // Volume in mm³ → m³: divide by 1e9
           measured.mass_kg = (volumeMm3 / 1e9) * densityKgM3;
         }
@@ -288,6 +316,7 @@ export const envelopeTools: DfmTool[] = [
         const structuredContent = {
           violations,
           measured,
+          mesh_topology: meshTopology,
           limits_declared: {
             build_volume_mm: buildVolume,
             ...(densityKgM3 !== undefined ? { density_kg_m3: densityKgM3 } : {}),

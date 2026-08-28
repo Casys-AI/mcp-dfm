@@ -1,6 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "mcp-dfm: MCP oracle for FDM printability — build envelope, overhang area, minimum wall thickness on STL"
+version: 0.3.0
+date-released: 2026-08-28
 authors:
   - family-names: Pesle
     given-names: Erwan Lee

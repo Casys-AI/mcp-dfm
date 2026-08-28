@@ -11,6 +11,7 @@
 import type { DfmTool } from "./types.ts";
 import { tessellateStep } from "../api/gmsh.ts";
 import {
+  analyzeMeshTopology,
   clusterViolations,
   normalize,
   overhangAngleDeg,
@@ -18,6 +19,7 @@ import {
   triangleCentroid,
 } from "../api/stl-geometry.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import { MESH_TOPOLOGY_SCHEMA } from "./mesh-topology.ts";
 import {
   rejectUnknownArgs,
   requireFiniteInRange,
@@ -44,6 +46,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
   required: [
     "violations",
     "measured",
+    "mesh_topology",
     "limits_declared",
     "not_checked",
     "input_artifact",
@@ -108,6 +111,7 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
         total_triangle_count: { type: "number" },
       },
     },
+    mesh_topology: MESH_TOPOLOGY_SCHEMA,
     limits_declared: {
       type: "object",
       additionalProperties: false,
@@ -284,6 +288,7 @@ export const overhangTools: DfmTool[] = [
           meshSizeMm,
           timeoutMs,
         });
+        const meshTopology = analyzeMeshTopology(tess.triangles);
 
         let totalSurfaceArea = 0;
         let overhangArea = 0;
@@ -336,6 +341,7 @@ export const overhangTools: DfmTool[] = [
             overhang_triangle_count: overhangTriangleCount,
             total_triangle_count: tess.triangleCount,
           },
+          mesh_topology: meshTopology,
           limits_declared: {
             max_overhang_deg: maxOverhangDeg,
             build_direction: buildDirection,
@@ -354,7 +360,7 @@ export const overhangTools: DfmTool[] = [
           }]).`
           : `${zones.length} overhang zone(s): ${
             overhangArea.toFixed(1)
-          } mm² total requires supports.`;
+          } mm² below the declared overhang threshold.`;
 
         return {
           content: `[${TOOL_NAME}] sha256:${snapshot.artifact.sha256}: ${summary}`,

@@ -9,7 +9,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  validate-release-version:
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.package.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Read package version and validate release tag
+        id: package
+        shell: bash
+        run: |
+          VERSION=$(deno eval 'console.log(JSON.parse(Deno.readTextFileSync("deno.json")).version)')
+          test -n "$VERSION"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} must match deno.json version v${VERSION}" >&2
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install native DFM dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gmsh python3 python3-numpy
+
+      - name: Verify native release gates
+        env:
+          DFM_RUN_NATIVE: "1"
+        run: deno task release:check
+
   build-push:
+    needs: validate-release-version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,4 +75,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.version=${{ needs.validate-release-version.outputs.package_version }}
+          build-args: |
+            PACKAGE_VERSION=${{ needs.validate-release-version.outputs.package_version }}

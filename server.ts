@@ -3,7 +3,7 @@
 import { McpApp } from "@casys/mcp-server";
 import { DfmToolsClient } from "./src/client.ts";
 
-const VERSION = "0.2.2";
+const VERSION = "0.3.0";
 const DEFAULT_PORT = 3018;
 const DEFAULT_HOSTNAME = "127.0.0.1";
 

@@ -36,8 +36,8 @@ export interface ThicknessViolation {
 }
 
 export interface ThicknessResult {
-  min_thickness_mm: number;
-  min_position_mm: [number, number, number];
+  min_thickness_mm: number | null;
+  min_position_mm: [number, number, number] | null;
   violations: ThicknessViolation[];
   sample_count: number;
   valid_ray_count: number;
@@ -51,7 +51,8 @@ export interface ThicknessResult {
  *
  * Limits declared:
  * - Sampling may miss walls thinner than the mesh element size.
- * - Only valid for closed (watertight) surface meshes.
+ * - Open or incomplete meshes can yield partial rays; callers receive explicit
+ *   topology and coverage status before treating a sampled value as usable.
  * - The script samples every N-th triangle, not random triangles, so the
  *   result is deterministic for a given mesh.
  */
@@ -143,8 +144,14 @@ for i in idx:
         })
 
 if not results:
-    print(json.dumps({'error': 'No valid ray intersections — mesh may not be closed'}))
-    sys.exit(1)
+    print(json.dumps({
+        'min_thickness_mm': None,
+        'min_position_mm': None,
+        'violations': [],
+        'sample_count': actual_sample,
+        'valid_ray_count': valid_rays
+    }))
+    sys.exit(0)
 
 thicknesses = [r['thickness_mm'] for r in results]
 min_t = min(thicknesses)
@@ -241,8 +248,8 @@ export async function runThicknessCheck(
     }
 
     return {
-      min_thickness_mm: parsed.min_thickness_mm as number,
-      min_position_mm: parsed.min_position_mm as [number, number, number],
+      min_thickness_mm: parsed.min_thickness_mm as number | null,
+      min_position_mm: parsed.min_position_mm as [number, number, number] | null,
       violations: parsed.violations as ThicknessViolation[],
       sample_count: parsed.sample_count as number,
       valid_ray_count: parsed.valid_ray_count as number,

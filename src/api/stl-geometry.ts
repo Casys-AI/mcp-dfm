@@ -16,6 +16,241 @@ export interface BoundingBox {
   size: [number, number, number];
 }
 
+/**
+ * Topological evidence derived from the exact triangles emitted by the current
+ * Gmsh tessellation. It is deliberately a mesh property, not a claim about
+ * the source CAD model or a manufacturing verdict.
+ */
+export interface MeshTopology {
+  /** No boundary edges in the tessellated surface. */
+  closed: boolean;
+  /**
+   * A locally watertight component graph: closed, manifold, consistently
+   * oriented, and free of degenerate triangles. This does not classify the
+   * global orientation or nesting of multiple disconnected shells.
+   */
+  watertight: boolean;
+  /** Edge and vertex-link manifold check on this tessellated surface. */
+  manifold: boolean;
+  /** Every shared edge has two oppositely directed triangle uses. */
+  orientation_consistent: boolean;
+  /** Connected components formed by triangles sharing a tessellated vertex. */
+  connected_component_count: number;
+  /** Edges with exactly one incident triangle. */
+  boundary_edge_count: number;
+  /** Edges with more than two incident triangles. */
+  non_manifold_edge_count: number;
+  /** Vertices whose incident-triangle link is not one manifold fan. */
+  non_manifold_vertex_count: number;
+  /** Triangles with repeated, non-finite, or zero-area vertices. */
+  degenerate_triangle_count: number;
+}
+
+interface EdgeUse {
+  direction: 1 | -1;
+}
+
+interface EdgeRecord {
+  vertices: [number, number];
+  uses: EdgeUse[];
+}
+
+/**
+ * Check the topology of a tessellated surface without introducing a second
+ * geometry runtime. Coordinate identity is intentional here: the input is the
+ * single ASCII STL snapshot emitted by Gmsh, so shared mesh vertices carry the
+ * same parsed coordinates.
+ */
+export function analyzeMeshTopology(triangles: Triangle[]): MeshTopology {
+  if (triangles.length === 0) {
+    return {
+      closed: false,
+      watertight: false,
+      manifold: false,
+      orientation_consistent: false,
+      connected_component_count: 0,
+      boundary_edge_count: 0,
+      non_manifold_edge_count: 0,
+      non_manifold_vertex_count: 0,
+      degenerate_triangle_count: 0,
+    };
+  }
+
+  const vertexIds = new Map<string, number>();
+  const firstTriangleByVertex = new Map<number, number>();
+  const edgeRecords = new Map<string, EdgeRecord>();
+  const vertexLinkEdges = new Map<number, Array<[number, number]>>();
+  const parents = triangles.map((_, index) => index);
+  let degenerateTriangleCount = 0;
+
+  const find = (index: number): number => {
+    let root = index;
+    while (parents[root] !== root) root = parents[root];
+    while (parents[index] !== index) {
+      const next = parents[index];
+      parents[index] = root;
+      index = next;
+    }
+    return root;
+  };
+
+  const union = (left: number, right: number): void => {
+    const leftRoot = find(left);
+    const rightRoot = find(right);
+    if (leftRoot !== rightRoot) parents[rightRoot] = leftRoot;
+  };
+
+  const vertexId = (vertex: [number, number, number]): number => {
+    const normalized = vertex.map((coordinate) =>
+      Object.is(coordinate, -0) ? 0 : coordinate
+    );
+    const key = normalized.join(",");
+    const existing = vertexIds.get(key);
+    if (existing !== undefined) return existing;
+    const created = vertexIds.size;
+    vertexIds.set(key, created);
+    return created;
+  };
+
+  const recordEdge = (start: number, end: number): void => {
+    if (start === end) return;
+    const [low, high] = start < end ? [start, end] : [end, start];
+    const key = `${low}:${high}`;
+    const record = edgeRecords.get(key) ?? {
+      vertices: [low, high],
+      uses: [],
+    };
+    record.uses.push({ direction: start === low ? 1 : -1 });
+    edgeRecords.set(key, record);
+  };
+
+  const recordLink = (center: number, left: number, right: number): void => {
+    const links = vertexLinkEdges.get(center) ?? [];
+    links.push([left, right]);
+    vertexLinkEdges.set(center, links);
+  };
+
+  for (const [triangleIndex, triangle] of triangles.entries()) {
+    const ids = triangle.vertices.map(vertexId) as [number, number, number];
+    for (const id of ids) {
+      const first = firstTriangleByVertex.get(id);
+      if (first === undefined) firstTriangleByVertex.set(id, triangleIndex);
+      else union(first, triangleIndex);
+    }
+
+    const allFinite = triangle.vertices.every((vertex) =>
+      vertex.every((coordinate) => Number.isFinite(coordinate))
+    );
+    const hasRepeatedVertex = new Set(ids).size !== 3;
+    const area = triangleArea(
+      triangle.vertices[0],
+      triangle.vertices[1],
+      triangle.vertices[2],
+    );
+    if (!allFinite || hasRepeatedVertex || !Number.isFinite(area) || area <= 1e-12) {
+      degenerateTriangleCount++;
+      continue;
+    }
+
+    recordEdge(ids[0], ids[1]);
+    recordEdge(ids[1], ids[2]);
+    recordEdge(ids[2], ids[0]);
+    recordLink(ids[0], ids[1], ids[2]);
+    recordLink(ids[1], ids[2], ids[0]);
+    recordLink(ids[2], ids[0], ids[1]);
+  }
+
+  const boundaryVertices = new Set<number>();
+  let boundaryEdgeCount = 0;
+  let nonManifoldEdgeCount = 0;
+  let orientationConsistent = degenerateTriangleCount === 0;
+
+  for (const record of edgeRecords.values()) {
+    if (record.uses.length === 1) {
+      boundaryEdgeCount++;
+      boundaryVertices.add(record.vertices[0]);
+      boundaryVertices.add(record.vertices[1]);
+    } else if (record.uses.length > 2) {
+      nonManifoldEdgeCount++;
+      orientationConsistent = false;
+    } else if (record.uses[0].direction === record.uses[1].direction) {
+      orientationConsistent = false;
+    }
+  }
+
+  let nonManifoldVertexCount = 0;
+  for (const [center, links] of vertexLinkEdges) {
+    const degrees = new Map<number, number>();
+    const neighbors = new Map<number, Set<number>>();
+    for (const [left, right] of links) {
+      degrees.set(left, (degrees.get(left) ?? 0) + 1);
+      degrees.set(right, (degrees.get(right) ?? 0) + 1);
+      const leftNeighbors = neighbors.get(left) ?? new Set<number>();
+      leftNeighbors.add(right);
+      neighbors.set(left, leftNeighbors);
+      const rightNeighbors = neighbors.get(right) ?? new Set<number>();
+      rightNeighbors.add(left);
+      neighbors.set(right, rightNeighbors);
+    }
+
+    const firstNeighbor = degrees.keys().next().value as number | undefined;
+    const visited = new Set<number>();
+    if (firstNeighbor !== undefined) {
+      const stack = [firstNeighbor];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        for (const adjacent of neighbors.get(current) ?? []) stack.push(adjacent);
+      }
+    }
+
+    const degreeValues = [...degrees.values()];
+    const connected = visited.size === degrees.size && degrees.size > 0;
+    const hasBoundary = boundaryVertices.has(center);
+    const validFan = hasBoundary
+      ? degreeValues.filter((degree) => degree === 1).length === 2 &&
+        degreeValues.every((degree) => degree === 1 || degree === 2)
+      : degreeValues.every((degree) => degree === 2);
+    if (!connected || !validFan) nonManifoldVertexCount++;
+  }
+
+  const componentRoots = new Set<number>();
+  for (let triangleIndex = 0; triangleIndex < triangles.length; triangleIndex++) {
+    componentRoots.add(find(triangleIndex));
+  }
+
+  const manifold = degenerateTriangleCount === 0 &&
+    nonManifoldEdgeCount === 0 && nonManifoldVertexCount === 0;
+  const closed = degenerateTriangleCount === 0 && boundaryEdgeCount === 0;
+
+  return {
+    closed,
+    watertight: closed && manifold && orientationConsistent,
+    manifold,
+    orientation_consistent: orientationConsistent,
+    connected_component_count: componentRoots.size,
+    boundary_edge_count: boundaryEdgeCount,
+    non_manifold_edge_count: nonManifoldEdgeCount,
+    non_manifold_vertex_count: nonManifoldVertexCount,
+    degenerate_triangle_count: degenerateTriangleCount,
+  };
+}
+
+/**
+ * Establish the narrow volume subset this mesh-only pass can support.
+ *
+ * With exactly one watertight component, the absolute divergence-theorem
+ * magnitude is invariant if the complete shell is globally reversed, and
+ * there is no second shell whose nesting or orientation could alter a material
+ * volume. More than one component is deliberately left unverified: this
+ * lightweight topology pass does not prove global shell containment or resolve
+ * their relative orientation.
+ */
+export function hasSingleShellVolumeEvidence(topology: MeshTopology): boolean {
+  return topology.watertight && topology.connected_component_count === 1;
+}
+
 /** Compute the axis-aligned bounding box from triangle vertices. */
 export function computeBoundingBox(triangles: Triangle[]): BoundingBox {
   let minX = Infinity, minY = Infinity, minZ = Infinity;
@@ -40,10 +275,13 @@ export function computeBoundingBox(triangles: Triangle[]): BoundingBox {
 }
 
 /**
- * Compute the volume of a closed surface mesh via the divergence theorem.
+ * Compute the numerical absolute divergence-theorem volume of a surface mesh.
  *
- * Accurate for watertight (closed) manifolds. Open shells return a meaningless
- * value — callers should validate closure before trusting the result.
+ * A single watertight component has orientation-invariant magnitude. Multiple
+ * components are summed before the absolute value, so their relative global
+ * orientation can cancel; callers must use hasSingleShellVolumeEvidence before
+ * treating this as a computed material volume. Open shells also return only a
+ * diagnostic numerical value.
  *
  * Formula: V = (1/6) * |Σ dot(v0, cross(v1, v2))|
  */
@@ -131,7 +369,7 @@ export function cross(
  *  90°  → face is vertical           (no overhang from below)
  * 180°  → face points straight up    (self-supporting)
  *
- * A face with overhang angle < threshold requires supports.
+ * A face with overhang angle < threshold is reported against that caller-declared limit.
  */
 export function overhangAngleDeg(
   faceNormal: [number, number, number],

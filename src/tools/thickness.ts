@@ -22,9 +22,10 @@
 
 import type { DfmTool } from "./types.ts";
 import { tessellateStep } from "../api/gmsh.ts";
-import { clusterViolations } from "../api/stl-geometry.ts";
+import { analyzeMeshTopology, clusterViolations } from "../api/stl-geometry.ts";
 import { runThicknessCheck } from "../api/thickness-runner.ts";
 import { snapshotStepArtifact } from "../api/input-artifact.ts";
+import { MESH_TOPOLOGY_SCHEMA } from "./mesh-topology.ts";
 import {
   rejectUnknownArgs,
   requireFinitePositive,
@@ -38,7 +39,7 @@ const TOOL_NAME = "dfm_check_min_thickness";
 
 const NOT_CHECKED = [
   "Sampling may miss a wall thinner than the mesh triangle edge length — tighten mesh_size_mm to reduce this risk.",
-  "Only works on closed (watertight) surface meshes; open shells return an error.",
+  "minimum_thickness_status is unverified unless the emitted surface mesh is watertight and every sampled ray reaches an opposing surface.",
   "Internal features (blind holes, pockets) are measured if their surface is captured by the tessellation.",
   "Material-specific minimum feature rules (e.g. SLS vs FDM vs SLA) are not applied — only the caller-declared threshold is used.",
   "The algorithm reports thickness along the inward face normal direction, not the true minimum wall thickness in all directions; a very thin diagonal wall may be undersampled.",
@@ -50,6 +51,8 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
   required: [
     "violations",
     "measured",
+    "mesh_topology",
+    "ray_coverage",
     "limits_declared",
     "not_checked",
     "input_artifact",
@@ -105,19 +108,41 @@ const OUTPUT_SCHEMA: Record<string, unknown> = {
       required: [
         "min_thickness_mm",
         "min_position_mm",
+        "minimum_thickness_status",
         "sample_count",
         "valid_ray_count",
       ],
       properties: {
-        min_thickness_mm: { type: "number" },
+        min_thickness_mm: { type: ["number", "null"] },
         min_position_mm: {
-          type: "array",
+          type: ["array", "null"],
           items: { type: "number" },
           minItems: 3,
           maxItems: 3,
         },
+        minimum_thickness_status: {
+          type: "string",
+          enum: ["sampled", "unverified"],
+        },
         sample_count: { type: "number" },
         valid_ray_count: { type: "number" },
+      },
+    },
+    mesh_topology: MESH_TOPOLOGY_SCHEMA,
+    ray_coverage: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "sampled_triangle_count",
+        "valid_ray_count",
+        "unresolved_ray_count",
+        "complete",
+      ],
+      properties: {
+        sampled_triangle_count: { type: "integer", minimum: 0 },
+        valid_ray_count: { type: "integer", minimum: 0 },
+        unresolved_ray_count: { type: "integer", minimum: 0 },
+        complete: { type: "boolean" },
       },
     },
     limits_declared: {
@@ -150,10 +175,12 @@ export const thicknessTools: DfmTool[] = [
       "using Möller-Trumbore ray-triangle intersection in numpy (no trimesh). " +
       "For each sampled triangle centre, shoots a ray along the inward normal and " +
       "records the first intersection distance. Reports the minimum thickness found, " +
-      "its 3D position, and all sample points below the caller-declared min_thickness_mm. " +
+      "its 3D position, all sample points below the caller-declared min_thickness_mm, " +
+      "and topology plus ray-coverage evidence. " +
       "Requires gmsh on PATH and python3 with numpy. Units: mm. " +
       "NOT CHECKED: sampling may miss walls thinner than the triangle edge length; " +
-      "only valid for closed (watertight) meshes; material-specific rules not applied.",
+      "the sampled result is marked unverified when topology or ray coverage is incomplete; " +
+      "material-specific rules not applied.",
     category: "thickness",
     annotations: {
       readOnlyHint: true,
@@ -281,6 +308,7 @@ export const thicknessTools: DfmTool[] = [
             meshSizeMm,
             timeoutMs: timeoutMs / 2,
           });
+          const meshTopology = analyzeMeshTopology(tess.triangles);
 
           // Write the parsed STL back as ASCII for the Python subprocess.
           const lines: string[] = ["solid dfm"];
@@ -319,6 +347,16 @@ export const thicknessTools: DfmTool[] = [
             ],
           }));
           const zones = clusterViolations(violationItems, clusterRadiusMm);
+          const rayCoverage = {
+            sampled_triangle_count: result.sample_count,
+            valid_ray_count: result.valid_ray_count,
+            unresolved_ray_count: result.sample_count - result.valid_ray_count,
+            complete: result.sample_count > 0 &&
+              result.valid_ray_count === result.sample_count,
+          };
+          const minimumThicknessStatus = meshTopology.watertight && rayCoverage.complete
+            ? "sampled"
+            : "unverified";
 
           const structuredContent = {
             violations: zones.map((z) => ({
@@ -329,9 +367,12 @@ export const thicknessTools: DfmTool[] = [
             measured: {
               min_thickness_mm: result.min_thickness_mm,
               min_position_mm: result.min_position_mm,
+              minimum_thickness_status: minimumThicknessStatus,
               sample_count: result.sample_count,
               valid_ray_count: result.valid_ray_count,
             },
+            mesh_topology: meshTopology,
+            ray_coverage: rayCoverage,
             limits_declared: {
               min_thickness_mm: minThicknessMm,
             },
@@ -343,12 +384,15 @@ export const thicknessTools: DfmTool[] = [
             },
           };
 
-          const summary = zones.length === 0
+          const summary = minimumThicknessStatus === "unverified"
+            ? `Minimum thickness is unverified (watertight: ${meshTopology.watertight}, ` +
+              `ray coverage: ${result.valid_ray_count}/${result.sample_count}).`
+            : zones.length === 0
             ? `No thickness violations (min measured: ${
-              result.min_thickness_mm.toFixed(3)
+              result.min_thickness_mm!.toFixed(3)
             } mm, threshold: ${minThicknessMm} mm).`
             : `${zones.length} thin zone(s): min thickness ${
-              result.min_thickness_mm.toFixed(3)
+              result.min_thickness_mm!.toFixed(3)
             } mm (threshold: ${minThicknessMm} mm).`;
 
           return {

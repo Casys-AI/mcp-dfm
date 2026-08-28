@@ -11,6 +11,10 @@
 
 FROM denoland/deno:debian
 
+ARG PACKAGE_VERSION=0.3.0
+LABEL org.opencontainers.image.title="mcp-dfm" \
+      org.opencontainers.image.version="${PACKAGE_VERSION}"
+
 # Install system-level runtime dependencies.
 # python3-numpy pulls python3 as a dependency; we name it explicitly for clarity.
 # --no-install-recommends keeps the layer lean.

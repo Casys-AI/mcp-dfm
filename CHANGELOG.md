@@ -4,6 +4,20 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 
 ## Unreleased
 
+## 0.3.0 — 2026-08-28
+
+- Added closed `mesh_topology` evidence to every result: closed/watertight/manifold and
+  orientation state, connected components, boundary and non-manifold edges/vertices, and
+  degenerate triangles for the exact Gmsh surface mesh used by the call.
+- `dfm_check_envelope` now labels a numerical divergence-theorem volume `unverified`
+  unless that mesh is a single watertight component. Multiple closed components remain
+  `unverified`: their global orientation and nesting are not classified. Derived mass is
+  withheld on the same condition.
+  `dfm_check_min_thickness` now returns closed ray-coverage evidence and marks its sampled
+  minimum `unverified` when topology or ray coverage does not establish its prerequisites.
+- JSR publication now runs the real Gmsh and NumPy fixture checks. The multi-architecture
+  image receives its OCI version from `deno.json`, and a versioned image tag must match it.
+
 ## 0.2.2 — 2026-08-27
 
 - Replaced the duplicate stdio-to-HTTP adapter with the era-aware native stdio transport
