@@ -56,11 +56,12 @@ of the global minimum wall thickness.
 
 ## Quick start: Docker image over HTTP
 
-Version `0.3.0` packages Gmsh, Python, and NumPy for `linux/amd64` and `linux/arm64`.
+Version `0.4.0` packages Gmsh, Python, and NumPy for `linux/amd64` and `linux/arm64`.
 The Docker workflow derives its OCI version from `deno.json` and accepts a semantic
-image tag only when the pushed Git tag matches the package version. After that release
-workflow completes, use the versioned image and pin the GHCR digest in a deployment
-manifest.
+image tag only when the pushed Git tag matches the package version. The command below is
+the last published `0.3.0` image digest, kept until the `0.4.0` image exists; it is not
+the 0.4.0 image. After that release workflow completes, pin the new GHCR digest in a
+deployment manifest.
 
 ```bash
 docker run --rm \
@@ -148,8 +149,8 @@ summary for the model. Floating-point values are not rounded in the wire result,
 consumers should apply tolerances appropriate to their case.
 
 `ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority for a
-version or capability. Resolve the `0.3.0` image to its GHCR digest for a pinned
-deployment.
+version or capability. The digest in the quick-start command is the last published
+`0.3.0` image. Resolve the `0.4.0` image to its GHCR digest after that image exists.
 
 ## Tool contracts
 

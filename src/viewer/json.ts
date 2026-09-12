@@ -177,6 +177,17 @@ export function vector3(value: unknown, name: string): [number, number, number] 
   ];
 }
 
+export function nonZeroVector3(
+  value: unknown,
+  name: string,
+): [number, number, number] {
+  const vector = vector3(value, name);
+  if (vector[0] === 0 && vector[1] === 0 && vector[2] === 0) {
+    throw new TypeError(`${name} must not be a zero vector.`);
+  }
+  return vector;
+}
+
 export function strings(value: unknown, name: string): readonly string[] {
   return denseArray(value, name).map((item, index) =>
     nonEmpty(item, `${name}[${index}]`)

@@ -13,7 +13,11 @@ import {
   SESSION_REJECTED_CODE,
   toSurfaceState,
 } from "./app.ts";
-import { displayStateFromToolResult, displayStateFromViewerSession } from "./model.ts";
+import {
+  digitalThreadReasonSummaries,
+  displayStateFromToolResult,
+  displayStateFromViewerSession,
+} from "./model.ts";
 
 const STEP_SHA = "a".repeat(64);
 const CASE_SHA = "b".repeat(64);
@@ -100,7 +104,33 @@ Deno.test("text fallback remains usable when structuredContent is absent", () =>
   assertEquals(state.result.kind, "dfm-overhangs-raw");
 });
 
-Deno.test("App identity is the unpublished viewer candidate", () => {
+Deno.test("recorded display shows Digital Thread reason summaries without recomputing zones", async () => {
+  const state = await displayStateFromViewerSession(await validSession());
+  assertEquals(state.kind, "result");
+  if (
+    state.kind !== "result" || state.result.kind !== "digital-thread-measured-checks"
+  ) {
+    throw new Error("expected recorded checks");
+  }
+  assertEquals(
+    digitalThreadReasonSummaries(state.result.evaluations.verdicts[0]),
+    "none",
+  );
+  assertEquals(
+    digitalThreadReasonSummaries(state.result.evaluations.verdicts[1]),
+    "none",
+  );
+  assertEquals(
+    digitalThreadReasonSummaries(state.result.evaluations.verdicts[2]),
+    "One overhang zone remains after the declared Z-min filter.",
+  );
+  assertEquals(state.result.overhang.violations.length, 2);
+  assertEquals(state.result.zMinFilter.filtered.length, 1);
+  assertEquals(state.result.zMinFilter.remaining.length, 1);
+  assertEquals(digitalThreadReasonSummaries(undefined), "unavailable");
+});
+
+Deno.test("App identity matches the 0.4.0 package", () => {
   assertEquals(DFM_APP_INFO.name, "io.casys.mcp-dfm.results");
   assertEquals(DFM_APP_INFO.version, "0.4.0");
   assertEquals(DFM_STATUS_CLASS, "dfm-viewer-state");

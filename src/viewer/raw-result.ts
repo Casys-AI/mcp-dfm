@@ -22,6 +22,7 @@ import {
   finiteNumber,
   nonNegativeInteger,
   nonNegativeNumber,
+  nonZeroVector3,
   positiveInteger,
   positiveNumber,
   record,
@@ -257,7 +258,7 @@ function parseThicknessRaw(root: Record<string, unknown>): DfmRawThicknessResult
       ["sampled", "unverified"] as const,
       "dfm_check_min_thickness.measured.minimum_thickness_status",
     ),
-    rayCoverage: optionalRayCoverage(root.ray_coverage),
+    rayCoverage: optionalRayCoverage(root.ray_coverage, sampleCount, validRayCount),
     meshTopology: optionalMeshTopology(
       root.mesh_topology,
       "dfm_check_min_thickness.mesh_topology",
@@ -314,7 +315,7 @@ function parseOverhangRaw(root: Record<string, unknown>): DfmRawOverhangResult {
       totalTriangleCount,
     },
     thresholdDeg,
-    buildDirection: vector3(
+    buildDirection: nonZeroVector3(
       limits.build_direction,
       "dfm_check_overhangs.limits_declared.build_direction",
     ),
@@ -469,7 +470,11 @@ function optionalMeshTopology(
   };
 }
 
-function optionalRayCoverage(value: unknown): DfmQuality<DfmRayCoverage> {
+function optionalRayCoverage(
+  value: unknown,
+  sampleCount: number,
+  measuredValidRayCount: number,
+): DfmQuality<DfmRayCoverage> {
   if (value === undefined) {
     return { status: "unavailable", reason: QUALITY_ABSENT_ON_RESULT_REASON };
   }
@@ -479,25 +484,51 @@ function optionalRayCoverage(value: unknown): DfmQuality<DfmRayCoverage> {
     "unresolved_ray_count",
     "complete",
   ], "dfm_check_min_thickness.ray_coverage");
+  const sampledTriangleCount = nonNegativeInteger(
+    root.sampled_triangle_count,
+    "dfm_check_min_thickness.ray_coverage.sampled_triangle_count",
+  );
+  const validRayCount = nonNegativeInteger(
+    root.valid_ray_count,
+    "dfm_check_min_thickness.ray_coverage.valid_ray_count",
+  );
+  const unresolvedRayCount = nonNegativeInteger(
+    root.unresolved_ray_count,
+    "dfm_check_min_thickness.ray_coverage.unresolved_ray_count",
+  );
+  const complete = requireBoolean(
+    root.complete,
+    "dfm_check_min_thickness.ray_coverage.complete",
+  );
+  if (sampledTriangleCount !== sampleCount) {
+    throw new TypeError(
+      "dfm_check_min_thickness.ray_coverage.sampled_triangle_count must equal measured.sample_count.",
+    );
+  }
+  if (validRayCount !== measuredValidRayCount) {
+    throw new TypeError(
+      "dfm_check_min_thickness.ray_coverage.valid_ray_count must equal measured.valid_ray_count.",
+    );
+  }
+  if (unresolvedRayCount !== sampledTriangleCount - validRayCount) {
+    throw new TypeError(
+      "dfm_check_min_thickness.ray_coverage.unresolved_ray_count must equal sampled_triangle_count minus valid_ray_count.",
+    );
+  }
+  const expectedComplete = sampledTriangleCount > 0 &&
+    validRayCount === sampledTriangleCount;
+  if (complete !== expectedComplete) {
+    throw new TypeError(
+      "dfm_check_min_thickness.ray_coverage.complete does not match sampled and valid ray counts.",
+    );
+  }
   return {
     status: "available",
     value: {
-      sampled_triangle_count: nonNegativeInteger(
-        root.sampled_triangle_count,
-        "dfm_check_min_thickness.ray_coverage.sampled_triangle_count",
-      ),
-      valid_ray_count: nonNegativeInteger(
-        root.valid_ray_count,
-        "dfm_check_min_thickness.ray_coverage.valid_ray_count",
-      ),
-      unresolved_ray_count: nonNegativeInteger(
-        root.unresolved_ray_count,
-        "dfm_check_min_thickness.ray_coverage.unresolved_ray_count",
-      ),
-      complete: requireBoolean(
-        root.complete,
-        "dfm_check_min_thickness.ray_coverage.complete",
-      ),
+      sampled_triangle_count: sampledTriangleCount,
+      valid_ray_count: validRayCount,
+      unresolved_ray_count: unresolvedRayCount,
+      complete,
     },
   };
 }

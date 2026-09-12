@@ -1,8 +1,9 @@
 /**
  * App, resource, and recorded-session identities owned by mcp-dfm.
  *
- * The solver package version remains 0.3.0. The App version is a local
- * unpublished viewer candidate and must not be read as a solver release.
+ * Package, server, and App versions are 0.4.0. The App is the shipped
+ * read-only viewer for this release; it does not recompute measurements
+ * or declare a part manufacturable.
  */
 
 export const DFM_RESULTS_VIEWER_URI = "ui://mcp-dfm/results-viewer" as const;

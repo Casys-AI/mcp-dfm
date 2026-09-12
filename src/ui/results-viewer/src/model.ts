@@ -1,4 +1,5 @@
 import {
+  type DfmCheckVerdict,
   type DfmRawToolResult,
   type DfmRecordedChecksResult,
   type DfmViewerSession,
@@ -79,6 +80,15 @@ export function isRecordedChecks(
   value: DfmResultsViewData,
 ): value is DfmRecordedChecksResult {
   return value.kind === "digital-thread-measured-checks";
+}
+
+/** Display the recorded Digital Thread summaries; do not recompute a verdict. */
+export function digitalThreadReasonSummaries(
+  verdict: DfmCheckVerdict | undefined,
+): string {
+  if (verdict === undefined) return "unavailable";
+  if (verdict.violations.length === 0) return "none";
+  return verdict.violations.map((item) => item.summary).join("; ");
 }
 
 function jsonTextFallback(

@@ -11,6 +11,11 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 - Refuses private staged paths and malformed sessions. The viewer does not run a solver,
   recompute a verdict, or declare a part manufacturable.
 - Reproduces the bundled viewer in CI from an exact public MCP View source commit.
+- Rejects a zero `build_direction` on raw and recorded overhang evidence, matching the
+  live `dfm_check_overhangs` contract, and rejects contradictory `ray_coverage`
+  arithmetic against measured sample and valid-ray counts.
+- Displays Digital Thread verdict reason summaries per check, distinct from raw provider
+  zones and Z-min filter results.
 
 ## 0.3.0 — 2026-08-28
 

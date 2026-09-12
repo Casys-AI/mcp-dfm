@@ -30,7 +30,11 @@ import type {
   DfmRecordedChecksResult,
   DfmZone,
 } from "../../../viewer-session.ts";
-import { type DfmResultsViewData, isRecordedChecks } from "./model.ts";
+import {
+  type DfmResultsViewData,
+  digitalThreadReasonSummaries,
+  isRecordedChecks,
+} from "./model.ts";
 
 export const DFM_COMPONENT_KEYS = {
   measuredChecks: "dfm.measured-checks",
@@ -116,6 +120,11 @@ function RecordedChecksCard(
                 value: data.evaluations.verdicts[0]?.status ?? "unavailable",
               },
               {
+                id: "dt-envelope-reasons",
+                label: "Digital Thread reasons",
+                value: digitalThreadReasonSummaries(data.evaluations.verdicts[0]),
+              },
+              {
                 id: "raw-envelope",
                 label: "Raw provider violations",
                 value: envelopeFail
@@ -161,6 +170,11 @@ function RecordedChecksCard(
                 value: data.evaluations.verdicts[1]?.status ?? "unavailable",
               },
               {
+                id: "dt-thickness-reasons",
+                label: "Digital Thread reasons",
+                value: digitalThreadReasonSummaries(data.evaluations.verdicts[1]),
+              },
+              {
                 id: "raw-thickness",
                 label: "Raw provider violations",
                 value: thicknessFail || data.thickness.violations.length > 0
@@ -200,6 +214,11 @@ function RecordedChecksCard(
                 id: "dt-overhangs",
                 label: "Digital Thread verdict",
                 value: data.evaluations.verdicts[2]?.status ?? "unavailable",
+              },
+              {
+                id: "dt-overhangs-reasons",
+                label: "Digital Thread reasons",
+                value: digitalThreadReasonSummaries(data.evaluations.verdicts[2]),
               },
               {
                 id: "raw-overhangs",

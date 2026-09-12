@@ -26,6 +26,7 @@ import {
   nonEmpty,
   nonNegativeInteger,
   nonNegativeNumber,
+  nonZeroVector3,
   positiveInteger,
   positiveNumber,
   strings,
@@ -460,7 +461,7 @@ function parseOverhang(
       totalTriangleCount,
     },
     thresholdDeg,
-    buildDirection: vector3(
+    buildDirection: nonZeroVector3(
       root.buildDirection,
       "recorded checks.overhang.buildDirection",
     ),

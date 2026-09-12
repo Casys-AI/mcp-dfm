@@ -271,7 +271,97 @@ Deno.test("malformed live quantities are rejected", () => {
   );
 });
 
-Deno.test("App manifest binds the unpublished viewer candidate without changing solver version", () => {
+Deno.test("raw overhangs reject a zero build direction", () => {
+  assertThrows(
+    () => parseDfmRawToolResult(rawOverhang([0, 0, 0])),
+    TypeError,
+    "zero vector",
+  );
+});
+
+Deno.test("recorded overhangs reject a zero build direction", async () => {
+  const session = await validSession();
+  (session.projection.result as { overhang: { buildDirection: number[] } })
+    .overhang.buildDirection = [0, 0, 0];
+  await resign(session);
+  await assertRejects(
+    () => parseDfmViewerSession(session),
+    TypeError,
+    "zero vector",
+  );
+});
+
+Deno.test("live thickness ray_coverage is accepted only when it matches measured counts", () => {
+  const thickness = parseDfmRawToolResult(rawThickness());
+  assertEquals(thickness.kind, "dfm-min-thickness-raw");
+  if (thickness.kind !== "dfm-min-thickness-raw") {
+    throw new Error("expected thickness");
+  }
+  assertEquals(thickness.rayCoverage, {
+    status: "available",
+    value: {
+      sampled_triangle_count: 300,
+      valid_ray_count: 280,
+      unresolved_ray_count: 20,
+      complete: false,
+    },
+  });
+
+  assertThrows(
+    () =>
+      parseDfmRawToolResult(rawThickness({
+        ray_coverage: {
+          sampled_triangle_count: 299,
+          valid_ray_count: 280,
+          unresolved_ray_count: 19,
+          complete: false,
+        },
+      })),
+    TypeError,
+    "sampled_triangle_count must equal measured.sample_count",
+  );
+  assertThrows(
+    () =>
+      parseDfmRawToolResult(rawThickness({
+        ray_coverage: {
+          sampled_triangle_count: 300,
+          valid_ray_count: 279,
+          unresolved_ray_count: 21,
+          complete: false,
+        },
+      })),
+    TypeError,
+    "valid_ray_count must equal measured.valid_ray_count",
+  );
+  assertThrows(
+    () =>
+      parseDfmRawToolResult(rawThickness({
+        ray_coverage: {
+          sampled_triangle_count: 300,
+          valid_ray_count: 280,
+          unresolved_ray_count: 0,
+          complete: false,
+        },
+      })),
+    TypeError,
+    "unresolved_ray_count must equal sampled_triangle_count minus valid_ray_count",
+  );
+  assertThrows(
+    () =>
+      parseDfmRawToolResult(rawThickness({
+        ray_coverage: {
+          sampled_triangle_count: 300,
+          valid_ray_count: 280,
+          unresolved_ray_count: 20,
+          complete: true,
+        },
+      })),
+    TypeError,
+    "complete does not match sampled and valid ray counts",
+  );
+});
+
+Deno.test("App manifest version matches the 0.4.0 package", () => {
   assertEquals(DFM_VIEW_APP_MANIFEST.app.version, DFM_VIEW_APP_VERSION);
   assertEquals(DFM_VIEW_APP_MANIFEST.app.version, "0.4.0");
   assertEquals(
@@ -283,6 +373,48 @@ Deno.test("App manifest binds the unpublished viewer candidate without changing 
     DFM_VIEWER_SESSION_SCHEMA,
   );
 });
+
+function rawOverhang(build_direction: readonly [number, number, number]) {
+  return {
+    violations: [],
+    measured: {
+      total_surface_area_mm2: 10,
+      overhang_area_mm2: 1,
+      overhang_triangle_count: 1,
+      total_triangle_count: 4,
+    },
+    limits_declared: {
+      max_overhang_deg: 45,
+      build_direction,
+    },
+    not_checked: ["bed"],
+    input_artifact: { sha256: STEP_SHA, bytes: 12 },
+  };
+}
+
+function rawThickness(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    violations: [{ area_mm2: 12, centroid_mm: [1, 2, 3] }],
+    measured: {
+      min_thickness_mm: 0.8,
+      min_position_mm: [1, 2, 3],
+      sample_count: 300,
+      valid_ray_count: 280,
+    },
+    limits_declared: { min_thickness_mm: 1 },
+    not_checked: ["sampled"],
+    input_artifact: { sha256: STEP_SHA, bytes: 100 },
+    ray_coverage: {
+      sampled_triangle_count: 300,
+      valid_ray_count: 280,
+      unresolved_ray_count: 20,
+      complete: false,
+    },
+    ...overrides,
+  };
+}
 
 function recordedResult() {
   return {
