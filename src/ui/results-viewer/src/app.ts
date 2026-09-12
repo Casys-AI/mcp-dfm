@@ -9,6 +9,7 @@ import { installMcpViewFonts } from "@casys/mcp-view-components/fonts";
 import {
   DFM_VIEW_APP_MANIFEST,
   DFM_VIEWER_SESSION_SCHEMA,
+  isDfmViewerSessionEnvelope,
 } from "../../../viewer-session.ts";
 import { DFM_COMPONENT_REGISTRY } from "./components.tsx";
 import {
@@ -54,7 +55,7 @@ export function dfmSurfaceAppOptions(
     emptyLabel: "DFM returned no supported result projection.",
     fromToolResult: (result) => toSurfaceState(displayStateFromToolResult(result)),
     viewerSession: {
-      validate: (_value: unknown): _value is unknown => true,
+      validate: isDfmViewerSessionEnvelope,
       toState: async (value) => {
         try {
           return toSurfaceState(await displayStateFromViewerSession(value));

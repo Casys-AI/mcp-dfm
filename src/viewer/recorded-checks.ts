@@ -622,20 +622,29 @@ function parseEvaluations(value: unknown): DfmRecordedEvaluations {
 
 function parseVerdict(value: unknown, name: string): DfmCheckVerdict {
   const root = exactRecord(value, ["check", "status", "violations"], name);
+  const check = parseCheckName(root.check, `${name}.check`);
   return {
-    check: parseCheckName(root.check, `${name}.check`),
+    check,
     status: parseStatus(root.status, `${name}.status`),
     violations: denseArray(root.violations, `${name}.violations`).map(
-      (item, index) => parseNamedViolation(item, `${name}.violations[${index}]`),
+      (item, index) => parseNamedViolation(item, `${name}.violations[${index}]`, check),
     ),
   };
 }
 
-function parseNamedViolation(value: unknown, name: string): DfmNamedViolation {
+function parseNamedViolation(
+  value: unknown,
+  name: string,
+  expectedCheck: DfmCheckName,
+): DfmNamedViolation {
   const root = exactRecord(value, ["name", "check", "summary"], name);
+  const check = parseCheckName(root.check, `${name}.check`);
+  if (check !== expectedCheck) {
+    throw new TypeError(`${name}.check must match the enclosing verdict.`);
+  }
   return {
     name: nonEmpty(root.name, `${name}.name`),
-    check: parseCheckName(root.check, `${name}.check`),
+    check,
     summary: nonEmpty(root.summary, `${name}.summary`),
   };
 }

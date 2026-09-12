@@ -9,6 +9,7 @@ import {
   DFM_CAPTURE_URI_PATTERN,
   DFM_INDUSTRIALIZE_OPERATION,
   DFM_TARGET_MEDIA_TYPE,
+  DFM_THREAD_STEP_URI_PATTERN,
   DFM_VIEWER_SESSION_KIND,
   DFM_VIEWER_SESSION_SCHEMA,
 } from "./identities.ts";
@@ -71,6 +72,21 @@ export interface DfmViewerSession {
   readonly anchor: DfmViewerSessionAnchor;
   readonly provenance: DfmViewerSessionProvenance;
   readonly projection: DfmViewerSessionProjection;
+}
+
+/**
+ * Ownership predicate for `viewer.session.apply`. Schema and kind only;
+ * fingerprint, URI joins and recorded projection stay in `parseDfmViewerSession`.
+ */
+export function isDfmViewerSessionEnvelope(
+  value: unknown,
+): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const root = value as Record<string, unknown>;
+  return root.schemaVersion === DFM_VIEWER_SESSION_SCHEMA &&
+    root.kind === DFM_VIEWER_SESSION_KIND;
 }
 
 /**
@@ -303,6 +319,12 @@ function assertDfmViewerSessionJoins(session: DfmViewerSession): void {
     captureArtifact.fingerprint,
     DFM_CAPTURE_URI_PATTERN,
     "viewer session.provenance.captureArtifact",
+  );
+  assertDigestAddress(
+    inputArtifact.uri,
+    inputArtifact.fingerprint,
+    DFM_THREAD_STEP_URI_PATTERN,
+    "viewer session.provenance.inputArtifact",
   );
   if (session.projection.status !== "available") return;
   const result = session.projection.result;

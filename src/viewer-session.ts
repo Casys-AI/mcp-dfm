@@ -20,6 +20,7 @@ export {
   DFM_TARGET_MEDIA_TYPE,
   DFM_THICKNESS_RAW_SCHEMA,
   DFM_THICKNESS_TOOL,
+  DFM_THREAD_STEP_URI_PATTERN,
   DFM_VIEW_APP_ID,
   DFM_VIEW_APP_MANIFEST_URI,
   DFM_VIEW_APP_TITLE,
@@ -41,6 +42,7 @@ export type { DfmViewAppManifest } from "./viewer/manifest.ts";
 
 export {
   dfmRecordedSessionFingerprint,
+  isDfmViewerSessionEnvelope,
   parseDfmViewerSession,
 } from "./viewer/session.ts";
 export type {

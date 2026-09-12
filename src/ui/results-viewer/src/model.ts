@@ -1,9 +1,11 @@
 import {
+  DFM_RECORDED_CHECKS_SCHEMA,
   type DfmCheckVerdict,
   type DfmRawToolResult,
   type DfmRecordedChecksResult,
   type DfmViewerSession,
   parseDfmRawToolResult,
+  parseDfmRecordedChecksResult,
   parseDfmViewerSession,
   QUALITY_UNAVAILABLE_REASON,
 } from "../../../viewer-session.ts";
@@ -41,6 +43,9 @@ export function displayStateFromToolResult(
     ? (isRecord(result.structuredContent) ? result.structuredContent : undefined)
     : jsonTextFallback(result.content);
   if (structured === undefined) return { kind: "empty" };
+  if (isRecordedChecksDocument(structured)) {
+    return { kind: "result", result: parseDfmRecordedChecksResult(structured) };
+  }
   return { kind: "result", result: parseDfmRawToolResult(structured) };
 }
 
@@ -80,6 +85,11 @@ export function isRecordedChecks(
   value: DfmResultsViewData,
 ): value is DfmRecordedChecksResult {
   return value.kind === "digital-thread-measured-checks";
+}
+
+function isRecordedChecksDocument(value: Record<string, unknown>): boolean {
+  return value.schemaVersion === DFM_RECORDED_CHECKS_SCHEMA &&
+    value.kind === "digital-thread-measured-checks";
 }
 
 /** Display the recorded Digital Thread summaries; do not recompute a verdict. */
