@@ -1,0 +1,45 @@
+body {
+  min-width: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.dfm-component-surface {
+  container-type: inline-size;
+  padding: 8px;
+}
+
+.dfm-viewer-state {
+  margin: 8px;
+}
+
+.dfm-result-card .mcp-view-element-ident-label {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.dfm-result-card .mcp-view-element-body {
+  display: grid;
+  gap: 14px;
+}
+
+.dfm-result-card .mcp-view-element-section + .mcp-view-element-section {
+  margin-top: 0;
+}
+
+.dfm-evidence {
+  margin-top: 8px;
+  font-size: 0.9em;
+}
+
+.dfm-evidence ul {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+}
+
+.dfm-empty-evidence {
+  margin: 8px 0 0;
+  font-size: 0.9em;
+  opacity: 0.8;
+}

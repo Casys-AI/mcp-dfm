@@ -11,7 +11,7 @@
 
 FROM denoland/deno:debian
 
-ARG PACKAGE_VERSION=0.3.0
+ARG PACKAGE_VERSION=0.4.0
 LABEL org.opencontainers.image.title="mcp-dfm" \
       org.opencontainers.image.version="${PACKAGE_VERSION}"
 
@@ -32,7 +32,7 @@ WORKDIR /app
 COPY deno.json deno.lock ./
 
 # Copy all source needed for deno cache (local imports must resolve).
-COPY mod.ts server.ts ./
+COPY mod.ts server.ts LICENSE THIRD_PARTY_NOTICES.txt ./
 COPY src/ ./src/
 COPY docker-entrypoint.sh ./
 

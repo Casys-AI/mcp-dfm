@@ -58,3 +58,28 @@ export {
   runThicknessCheck,
   ThicknessError,
 } from "./src/api/thickness-runner.ts";
+
+export {
+  DFM_CAPTURE_URI_PREFIX,
+  DFM_INDUSTRIALIZE_OPERATION,
+  DFM_RECORDED_CHECKS_SCHEMA,
+  DFM_RESULT_SCHEMA_IDS,
+  DFM_RESULTS_VIEWER_URI,
+  DFM_VIEW_APP_ID,
+  DFM_VIEW_APP_MANIFEST,
+  DFM_VIEW_APP_MANIFEST_JSON,
+  DFM_VIEW_APP_MANIFEST_URI,
+  DFM_VIEW_APP_VERSION,
+  DFM_VIEWER_SESSION_KIND,
+  DFM_VIEWER_SESSION_SCHEMA,
+  dfmRecordedSessionFingerprint,
+  parseDfmRawToolResult,
+  parseDfmRecordedChecksResult,
+  parseDfmViewerSession,
+  VIEWER_SESSION_APPLY_ACTION,
+} from "./src/viewer-session.ts";
+export type {
+  DfmRawToolResult,
+  DfmRecordedChecksResult,
+  DfmViewerSession,
+} from "./src/viewer-session.ts";
