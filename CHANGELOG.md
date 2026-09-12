@@ -2,6 +2,18 @@
 
 All notable changes to `@casys/mcp-dfm` are documented here.
 
+## 0.4.1 — 2026-09-13
+
+- Recorded-session `inputArtifact.uri` must be the public digest-addressed Thread STEP
+  URI `/api/thread/assets/<sha256>.step` and must agree with the recorded fingerprint.
+- The App `validate` predicate owns only the DFM session schema and kind; fingerprint
+  and projection checks stay in `toState`.
+- Tool results advertised as `io.casys.mcp-dfm.recorded-checks/1.0` dispatch to the
+  recorded parser; raw envelope, thickness, and overhang results are unchanged.
+- Thickness display uses captured violation zones only and does not recompute a failure
+  from measured thickness versus threshold.
+- Nested Digital Thread verdict violations must name the enclosing check.
+
 ## 0.4.0 — 2026-09-12
 
 - Added the read-only MCP App `io.casys.mcp-dfm.results@0.4.0` for recorded Digital

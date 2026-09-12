@@ -361,9 +361,67 @@ Deno.test("live thickness ray_coverage is accepted only when it matches measured
   );
 });
 
-Deno.test("App manifest version matches the 0.4.0 package", () => {
+Deno.test("private STEP paths are rejected as recorded inputArtifact URIs", async () => {
+  for (
+    const uri of [
+      `/exports/${STEP_SHA}.step`,
+      `file:///tmp/${STEP_SHA}.step`,
+      `casys://isolated-output/sha256/${STEP_SHA}`,
+      `/api/thread/assets/${STEP_SHA}.stp`,
+      `/api/thread/assets/${STEP_SHA}.step?download=1`,
+    ]
+  ) {
+    const session = await validSession();
+    session.provenance.inputArtifact.uri = uri;
+    await resign(session);
+    await assertRejects(
+      () => parseDfmViewerSession(session),
+      TypeError,
+      "URI and fingerprint must identify the same bytes",
+    );
+  }
+
+  const mismatched = await validSession();
+  mismatched.provenance.inputArtifact.uri = threadStepUri("d".repeat(64));
+  await resign(mismatched);
+  await assertRejects(
+    () => parseDfmViewerSession(mismatched),
+    TypeError,
+    "URI and fingerprint must identify the same bytes",
+  );
+});
+
+Deno.test("recorded verdict violations must name the enclosing check", async () => {
+  const session = await validSession();
+  const result = session.projection.result as {
+    evaluations: {
+      verdicts: Array<{
+        check: string;
+        status: string;
+        violations: Array<{ name: string; check: string; summary: string }>;
+      }>;
+    };
+  };
+  result.evaluations.verdicts[0] = {
+    check: "envelope",
+    status: "fail",
+    violations: [{
+      name: "misattributed-overhang",
+      check: "overhangs",
+      summary: "An overhang reason under the envelope verdict.",
+    }],
+  };
+  await resign(session);
+  await assertRejects(
+    () => parseDfmViewerSession(session),
+    TypeError,
+    "must match the enclosing verdict",
+  );
+});
+
+Deno.test("App manifest version matches the 0.4.1 package", () => {
   assertEquals(DFM_VIEW_APP_MANIFEST.app.version, DFM_VIEW_APP_VERSION);
-  assertEquals(DFM_VIEW_APP_MANIFEST.app.version, "0.4.0");
+  assertEquals(DFM_VIEW_APP_MANIFEST.app.version, "0.4.1");
   assertEquals(
     DFM_VIEW_APP_MANIFEST.resources[0].acceptedActions[0],
     VIEWER_SESSION_APPLY_ACTION,
@@ -565,7 +623,7 @@ async function validSession(): Promise<MutableSession> {
       caseDigest: CASE_SHA,
       captureArtifact: artifact(),
       inputArtifact: {
-        uri: `casys://isolated-output/sha256/${STEP_SHA}`,
+        uri: threadStepUri(STEP_SHA),
         mediaType: "model/step",
         fingerprint: `sha256:${STEP_SHA}`,
         bytes: 86130,
@@ -585,4 +643,8 @@ async function resign(
   session: { basis: { sessionFingerprint: string } } & Record<string, unknown>,
 ): Promise<void> {
   session.basis.sessionFingerprint = await dfmRecordedSessionFingerprint(session);
+}
+
+function threadStepUri(digest: string): string {
+  return `/api/thread/assets/${digest}.step`;
 }

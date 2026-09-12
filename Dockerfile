@@ -11,7 +11,7 @@
 
 FROM denoland/deno:debian
 
-ARG PACKAGE_VERSION=0.4.0
+ARG PACKAGE_VERSION=0.4.1
 LABEL org.opencontainers.image.title="mcp-dfm" \
       org.opencontainers.image.version="${PACKAGE_VERSION}"
 

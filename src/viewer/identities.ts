@@ -1,7 +1,7 @@
 /**
  * App, resource, and recorded-session identities owned by mcp-dfm.
  *
- * Package, server, and App versions are 0.4.0. The App is the shipped
+ * Package, server, and App versions are 0.4.1. The App is the shipped
  * read-only viewer for this release; it does not recompute measurements
  * or declare a part manufacturable.
  */
@@ -11,7 +11,7 @@ export const DFM_VIEW_APP_MANIFEST_URI = "ui://mcp-dfm/app-manifest" as const;
 
 export const DFM_VIEW_APP_ID = "io.casys.mcp-dfm.results" as const;
 export const DFM_VIEW_APP_TITLE = "DFM Measured Checks" as const;
-export const DFM_VIEW_APP_VERSION = "0.4.0" as const;
+export const DFM_VIEW_APP_VERSION = "0.4.1" as const;
 
 export const DFM_VIEWER_SESSION_SCHEMA =
   "io.casys.mcp-dfm.recorded-checks-session/1.0" as const;
@@ -34,6 +34,10 @@ export const DFM_RESULT_SCHEMA_IDS = {
 export const DFM_CAPTURE_URI_PREFIX = "casys://dfm-check-capture/sha256/" as const;
 export const DFM_CAPTURE_URI_PATTERN =
   /^casys:\/\/dfm-check-capture\/sha256\/([a-f0-9]{64})$/;
+
+/** Public digest-addressed Thread STEP URI produced by Digital Thread. */
+export const DFM_THREAD_STEP_URI_PATTERN =
+  /^\/api\/thread\/assets\/([a-f0-9]{64})\.step$/;
 
 export const DFM_INDUSTRIALIZE_OPERATION = "industrialize.run-dfm-checks@1" as const;
 

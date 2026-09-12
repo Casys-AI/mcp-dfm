@@ -63,8 +63,6 @@ function RecordedChecksCard(
   },
 ) {
   const envelopeFail = data.envelope.violations.length > 0;
-  const thicknessFail = data.thickness.measured.minThicknessMm <
-    data.thickness.thresholdMm;
   return (
     <SemanticElement
       className="dfm-result-card"
@@ -95,9 +93,27 @@ function RecordedChecksCard(
             title="Envelope"
             locale={locale}
             metrics={[
-              metric("x", "Measured X", data.envelope.measured.xMm, "mm", locale),
-              metric("y", "Measured Y", data.envelope.measured.yMm, "mm", locale),
-              metric("z", "Measured Z", data.envelope.measured.zMm, "mm", locale),
+              metric(
+                "x",
+                "Measured X",
+                data.envelope.measured.xMm,
+                "mm",
+                locale,
+              ),
+              metric(
+                "y",
+                "Measured Y",
+                data.envelope.measured.yMm,
+                "mm",
+                locale,
+              ),
+              metric(
+                "z",
+                "Measured Z",
+                data.envelope.measured.zMm,
+                "mm",
+                locale,
+              ),
               metric(
                 "volume",
                 "Measured volume",
@@ -122,7 +138,9 @@ function RecordedChecksCard(
               {
                 id: "dt-envelope-reasons",
                 label: "Digital Thread reasons",
-                value: digitalThreadReasonSummaries(data.evaluations.verdicts[0]),
+                value: digitalThreadReasonSummaries(
+                  data.evaluations.verdicts[0],
+                ),
               },
               {
                 id: "raw-envelope",
@@ -172,12 +190,14 @@ function RecordedChecksCard(
               {
                 id: "dt-thickness-reasons",
                 label: "Digital Thread reasons",
-                value: digitalThreadReasonSummaries(data.evaluations.verdicts[1]),
+                value: digitalThreadReasonSummaries(
+                  data.evaluations.verdicts[1],
+                ),
               },
               {
                 id: "raw-thickness",
                 label: "Raw provider violations",
-                value: thicknessFail || data.thickness.violations.length > 0
+                value: data.thickness.violations.length > 0
                   ? zoneSummary(data.thickness.violations, locale)
                   : "none",
               },
@@ -218,7 +238,9 @@ function RecordedChecksCard(
               {
                 id: "dt-overhangs-reasons",
                 label: "Digital Thread reasons",
-                value: digitalThreadReasonSummaries(data.evaluations.verdicts[2]),
+                value: digitalThreadReasonSummaries(
+                  data.evaluations.verdicts[2],
+                ),
               },
               {
                 id: "raw-overhangs",
@@ -311,7 +333,13 @@ function RawEnvelope(
         metric("x", "Measured X", data.measured.xMm, "mm", locale),
         metric("y", "Measured Y", data.measured.yMm, "mm", locale),
         metric("z", "Measured Z", data.measured.zMm, "mm", locale),
-        metric("volume", "Measured volume", data.measured.volumeMm3, "mm³", locale),
+        metric(
+          "volume",
+          "Measured volume",
+          data.measured.volumeMm3,
+          "mm³",
+          locale,
+        ),
       ]}
       facts={[
         {
@@ -412,7 +440,9 @@ function RawOverhang(
           "°",
           locale,
           `build direction [${
-            data.buildDirection.map((item) => formatNumber(item, locale)).join(", ")
+            data.buildDirection.map((item) => formatNumber(item, locale)).join(
+              ", ",
+            )
           }]`,
         ),
       ]}
@@ -457,7 +487,10 @@ function CheckSection({
 }
 
 function Expandable(
-  { summary, items }: { readonly summary: string; readonly items: readonly string[] },
+  { summary, items }: {
+    readonly summary: string;
+    readonly items: readonly string[];
+  },
 ) {
   if (items.length === 0) {
     return <p class="dfm-empty-evidence">No additional evidence recorded.</p>;
@@ -500,7 +533,9 @@ export const DFM_COMPONENT_REGISTRY = defineComponentRegistry<
 });
 
 function formatNumber(value: number, locale: string | undefined): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: 5 }).format(value);
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 5 }).format(
+    value,
+  );
 }
 
 function formatCount(value: number, locale: string | undefined): string {
@@ -549,7 +584,10 @@ function qualityValue(
   return { id, label, value: <InlineCode>available</InlineCode> };
 }
 
-function zoneSummary(zones: readonly DfmZone[], locale: string | undefined): string {
+function zoneSummary(
+  zones: readonly DfmZone[],
+  locale: string | undefined,
+): string {
   if (zones.length === 0) return "none";
   return `${formatCount(zones.length, locale)} zone(s): ${
     zones.map((zone) =>
@@ -579,6 +617,8 @@ function zMinSummary(
 
 function rawTitle(data: DfmRawToolResult): string {
   if (data.kind === "dfm-envelope-raw") return "Envelope measurement";
-  if (data.kind === "dfm-min-thickness-raw") return "Minimum thickness measurement";
+  if (data.kind === "dfm-min-thickness-raw") {
+    return "Minimum thickness measurement";
+  }
   return "Overhang measurement";
 }

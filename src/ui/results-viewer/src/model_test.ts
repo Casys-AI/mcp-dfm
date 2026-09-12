@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import {
   DFM_VIEW_APP_MANIFEST,
+  DFM_VIEWER_SESSION_KIND,
   DFM_VIEWER_SESSION_SCHEMA,
   dfmRecordedSessionFingerprint,
   QUALITY_ABSENT_ON_RESULT_REASON,
@@ -10,6 +11,7 @@ import {
 import {
   DFM_APP_INFO,
   DFM_STATUS_CLASS,
+  dfmSurfaceAppOptions,
   SESSION_REJECTED_CODE,
   toSurfaceState,
 } from "./app.ts";
@@ -108,7 +110,8 @@ Deno.test("recorded display shows Digital Thread reason summaries without recomp
   const state = await displayStateFromViewerSession(await validSession());
   assertEquals(state.kind, "result");
   if (
-    state.kind !== "result" || state.result.kind !== "digital-thread-measured-checks"
+    state.kind !== "result" ||
+    state.result.kind !== "digital-thread-measured-checks"
   ) {
     throw new Error("expected recorded checks");
   }
@@ -130,9 +133,50 @@ Deno.test("recorded display shows Digital Thread reason summaries without recomp
   assertEquals(digitalThreadReasonSummaries(undefined), "unavailable");
 });
 
-Deno.test("App identity matches the 0.4.0 package", () => {
+Deno.test("advertised recorded-checks result schema is parsed on the tool-result path", () => {
+  const state = displayStateFromToolResult({
+    structuredContent: recordedResult(),
+  });
+  assertEquals(state.kind, "result");
+  if (state.kind !== "result") throw new Error("expected result");
+  assertEquals(state.result.kind, "digital-thread-measured-checks");
+  if (state.result.kind !== "digital-thread-measured-checks") {
+    throw new Error("expected recorded checks");
+  }
+  assertEquals(state.result.evaluations.owner, "digital-thread");
+});
+
+Deno.test("App validate owns only DFM session schema and kind", () => {
+  const validate = dfmSurfaceAppOptions({} as HTMLElement).viewerSession!.validate;
+  assertEquals(
+    validate({
+      schemaVersion: DFM_VIEWER_SESSION_SCHEMA,
+      kind: DFM_VIEWER_SESSION_KIND,
+      extra: "deeper validation stays in toState",
+    }),
+    true,
+  );
+  assertEquals(
+    validate({
+      schemaVersion: "other/1.0",
+      kind: DFM_VIEWER_SESSION_KIND,
+    }),
+    false,
+  );
+  assertEquals(
+    validate({
+      schemaVersion: DFM_VIEWER_SESSION_SCHEMA,
+      kind: "other.kind",
+    }),
+    false,
+  );
+  assertEquals(validate(null), false);
+  assertEquals(validate("session"), false);
+});
+
+Deno.test("App identity matches the 0.4.1 package", () => {
   assertEquals(DFM_APP_INFO.name, "io.casys.mcp-dfm.results");
-  assertEquals(DFM_APP_INFO.version, "0.4.0");
+  assertEquals(DFM_APP_INFO.version, "0.4.1");
   assertEquals(DFM_STATUS_CLASS, "dfm-viewer-state");
   assertEquals(SESSION_REJECTED_CODE, "session-rejected");
   assertEquals(
@@ -261,7 +305,7 @@ async function validSession() {
       caseDigest: CASE_SHA,
       captureArtifact: artifact(),
       inputArtifact: {
-        uri: `casys://isolated-output/sha256/${STEP_SHA}`,
+        uri: `/api/thread/assets/${STEP_SHA}.step`,
         mediaType: "model/step",
         fingerprint: `sha256:${STEP_SHA}`,
         bytes: 86130,

@@ -3,7 +3,7 @@
   "app": {
     "id": "io.casys.mcp-dfm.results",
     "title": "DFM Measured Checks",
-    "version": "0.4.0"
+    "version": "0.4.1"
   },
   "resources": [
     {
