@@ -306,6 +306,37 @@ docker run --rm -i \
   ghcr.io/casys-ai/mcp-dfm@sha256:fd161cfd936773fa551e281d1ae371f7edc544f996eb966e6466d5ff49f384f5 stdio
 ```
 
+## MCP App viewer candidate (unpublished)
+
+This checkout includes a local MCP App, `io.casys.mcp-dfm.results@0.3.0-local.viewer.1`.
+The solver identity stays `0.3.0`. The App is a read-only projection of:
+
+- a closed recorded session `io.casys.mcp-dfm.recorded-checks-session/1.0` delivered
+  through `viewer.session.apply` (the Digital Thread path);
+- optional single-tool raw results for the three existing checks, with no
+  invented whole-case verdict.
+
+It does not execute Gmsh, recompute evaluations, or declare a part manufacturable.
+Recorded Digital Thread evaluations are labelled as Digital Thread-owned. Quality
+fields that a historical `DfmCheckCapture` does not record (`mesh_topology`,
+`volume_status`, `minimum_thickness_status`, `ray_coverage`) display as
+unavailable. Private `stagedPath` / `source_path` values are stripped or rejected.
+
+The HTML bundle is part of the package layout. Building it requires explicit local
+split MCP View packages (`@casys/mcp-view@0.9.3`, `@casys/mcp-view-contracts@0.1.0`,
+`@casys/mcp-view-components@0.9.0`) and does not fall back to a published SDK:
+
+```bash
+export MCP_VIEW_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view
+export MCP_VIEW_CONTRACTS_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view-contracts
+export MCP_VIEW_COMPONENTS_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view-components
+deno task build:ui
+deno task check:ui:bundle
+```
+
+This viewer candidate is not a JSR or GHCR release. Digital Thread production
+remains pinned to mcp-dfm 0.1.0 until a separate adoption decision.
+
 ## Development
 
 ```bash
@@ -313,8 +344,8 @@ deno task release:check
 DFM_RUN_NATIVE=1 deno task test
 ```
 
-`release:check` runs formatting, type checking, linting, non-native tests, and the stdio
-wire tests. The reusable CI quality workflow runs that fast job without `DFM_RUN_NATIVE`;
+`release:check` runs formatting, type checking, linting, non-native tests, the stdio
+wire tests, viewer model tests, and the versioned UI bundle freshness gate. The reusable CI quality workflow runs that fast job without `DFM_RUN_NATIVE`;
 its native job installs Gmsh, Python, and NumPy, then runs
 `DFM_RUN_NATIVE=1 deno task test`. A pull-request workflow calls the same quality workflow,
 which must complete before JSR publication or GHCR image build and push.

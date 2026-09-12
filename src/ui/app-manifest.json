@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "io.casys.mcp.view-app-manifest/1.0",
+  "app": {
+    "id": "io.casys.mcp-dfm.results",
+    "title": "DFM Measured Checks",
+    "version": "0.3.0-local.viewer.1"
+  },
+  "resources": [
+    {
+      "uri": "ui://mcp-dfm/results-viewer",
+      "ownership": "whole-view",
+      "resultSchemas": [
+        "io.casys.mcp-dfm.recorded-checks/1.0",
+        "io.casys.mcp-dfm.envelope-raw/1.0",
+        "io.casys.mcp-dfm.min-thickness-raw/1.0",
+        "io.casys.mcp-dfm.overhangs-raw/1.0"
+      ],
+      "acceptedActions": ["viewer.session.apply"],
+      "sessionSchemas": ["io.casys.mcp-dfm.recorded-checks-session/1.0"]
+    }
+  ]
+}

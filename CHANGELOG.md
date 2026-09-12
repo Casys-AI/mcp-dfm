@@ -4,6 +4,14 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 
 ## Unreleased
 
+- Added an unpublished local MCP App viewer candidate (`io.casys.mcp-dfm.results@0.3.0-local.viewer.1`)
+  for recorded Digital Thread measured-check sessions and optional single-tool raw
+  results. The solver package version remains `0.3.0`. The App does not run a
+  solver, recompute a verdict, or declare a part manufacturable. Historical
+  captures without mesh-topology or coverage fields display those readings as
+  unavailable. Private staged paths are refused. This candidate is not published
+  and does not adopt mcp-dfm 0.3 as the Digital Thread runtime pin.
+
 ## 0.3.0 — 2026-08-28
 
 - Added closed `mesh_topology` evidence to every result: closed/watertight/manifold and

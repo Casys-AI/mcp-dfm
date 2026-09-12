@@ -1,7 +1,13 @@
 /** Stateless HTTP MCP server for deterministic DFM geometry checks. */
 
-import { McpApp } from "@casys/mcp-server";
+import { McpApp, type RegisterViewersSummary } from "@casys/mcp-server";
 import { DfmToolsClient } from "./src/client.ts";
+import {
+  DFM_RESULTS_VIEWER_URI,
+  DFM_VIEW_APP_MANIFEST,
+  DFM_VIEW_APP_MANIFEST_JSON,
+  DFM_VIEW_APP_MANIFEST_URI,
+} from "./src/viewer-session.ts";
 
 const VERSION = "0.3.0";
 const DEFAULT_PORT = 3018;
@@ -9,14 +15,24 @@ const DEFAULT_HOSTNAME = "127.0.0.1";
 
 export interface CreateDfmServerOptions {
   logger?: (message: string) => void;
+  viewerFileSystem?: DfmResultsViewerFileSystem;
+  viewerModuleUrl?: string;
+}
+
+export interface DfmResultsViewerFileSystem {
+  exists(path: string): boolean;
+  readFile(path: string): string | Promise<string>;
 }
 
 export function createDfmServer(
   options: CreateDfmServerOptions = {},
-): { app: McpApp } {
+): { app: McpApp; hasResultsViewer: boolean } {
   const client = new DfmToolsClient();
   const handlers = client.buildHandlersMap();
+  const tools = client.toMCPFormat();
 
+  const logger = options.logger ??
+    ((message: string) => console.error(`[mcp-dfm] ${message}`));
   const app = new McpApp({
     name: "mcp-dfm",
     version: VERSION,
@@ -29,16 +45,122 @@ export function createDfmServer(
       "Each tool reports measured values and violations against caller-declared thresholds. " +
       "No verdict — the tool never declares a part manufacturable or not. " +
       "All thresholds must be supplied explicitly; no process defaults are applied.",
-    logger: options.logger ??
-      ((message) => console.error(`[mcp-dfm] ${message}`)),
+    logger,
   });
-  app.registerTools(client.toMCPFormat(), handlers);
-  return { app };
+  const viewerRegistration = registerDfmResultsViewer(
+    app,
+    options.viewerFileSystem,
+    options.viewerModuleUrl,
+  );
+  const hasResultsViewer = viewerRegistration.registered.includes(
+    "results-viewer",
+  );
+  if (hasResultsViewer) {
+    for (const tool of tools) {
+      tool._meta = { ui: { resourceUri: DFM_RESULTS_VIEWER_URI } };
+    }
+    registerDfmViewAppManifest(app);
+  }
+  app.registerTools(tools, handlers);
+  return { app, hasResultsViewer };
+}
+
+/** Publish the exact serialized App contract next to its HTML resource. */
+export function registerDfmViewAppManifest(app: McpApp): void {
+  const bytes = new TextEncoder().encode(DFM_VIEW_APP_MANIFEST_JSON);
+  app.registerResource(
+    {
+      uri: DFM_VIEW_APP_MANIFEST_URI,
+      name: "DFM View App manifest",
+      description:
+        `Exact ${DFM_VIEW_APP_MANIFEST.app.id}@${DFM_VIEW_APP_MANIFEST.app.version} ` +
+        "whole-view and recorded-session contract.",
+      mimeType: "application/json",
+      size: bytes.byteLength,
+    },
+    (requested) => {
+      if (requested.toString() !== DFM_VIEW_APP_MANIFEST_URI) {
+        throw new Error("Requested URI does not match the DFM App manifest.");
+      }
+      return {
+        uri: DFM_VIEW_APP_MANIFEST_URI,
+        mimeType: "application/json",
+        text: DFM_VIEW_APP_MANIFEST_JSON,
+      };
+    },
+  );
+}
+
+/** Register the built result viewer from a checkout or package. */
+export function registerDfmResultsViewer(
+  app: McpApp,
+  fileSystem: DfmResultsViewerFileSystem = defaultViewerFileSystem,
+  moduleUrl: string = import.meta.url,
+): RegisterViewersSummary {
+  return app.registerViewers({
+    prefix: "mcp-dfm",
+    viewers: ["results-viewer"],
+    moduleUrl,
+    exists: fileSystem.exists,
+    readFile: fileSystem.readFile,
+    humanName: () => "DFM Measured Checks",
+  });
+}
+
+export function createDfmResultsViewerFileSystem(
+  fetchViewer: (url: string) => Promise<Response> = (url) => fetch(url),
+): DfmResultsViewerFileSystem {
+  return {
+    exists(path) {
+      if (isRemoteViewerUrl(path)) return true;
+      try {
+        return Deno.statSync(path).isFile;
+      } catch (error) {
+        if (
+          error instanceof Deno.errors.NotFound ||
+          error instanceof Deno.errors.PermissionDenied ||
+          (error instanceof Error && error.name === "NotCapable")
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    },
+    async readFile(path) {
+      if (!isRemoteViewerUrl(path)) return await Deno.readTextFile(path);
+      let response: Response;
+      try {
+        response = await fetchViewer(path);
+      } catch (error) {
+        throw new Error(
+          `Unable to fetch DFM results viewer from ${path}.`,
+          { cause: error },
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Unable to fetch DFM results viewer from ${path}: HTTP ${response.status} ${response.statusText}.`,
+        );
+      }
+      return await response.text();
+    },
+  };
+}
+
+const defaultViewerFileSystem = createDfmResultsViewerFileSystem();
+
+function isRemoteViewerUrl(path: string): boolean {
+  return path.startsWith("https://") || path.startsWith("http://");
 }
 
 if (import.meta.main) {
   const cli = parseCli(Deno.args);
-  const { app } = createDfmServer();
+  const { app, hasResultsViewer } = createDfmServer();
+  if (!hasResultsViewer) {
+    console.error(
+      "[mcp-dfm] Results viewer is not built; run `deno task build:ui`.",
+    );
+  }
   if (cli.transport === "stdio") {
     await app.start();
   } else {
