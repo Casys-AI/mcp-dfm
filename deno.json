@@ -1,9 +1,12 @@
 {
   "name": "@casys/mcp-dfm",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "minimumDependencyAge": {
     "age": "P1D",
-    "exclude": ["jsr:@casys/mcp-server", "jsr:@casys/mcp-view-contracts"]
+    "exclude": [
+      "jsr:@casys/mcp-server",
+      "jsr:@casys/mcp-view-contracts"
+    ]
   },
   "tasks": {
     "serve": "deno run --allow-all server.ts --port=3018",
@@ -34,7 +37,8 @@
       "CHANGELOG.md",
       "CITATION.cff",
       "SECURITY.md",
-      "LICENSE"
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.txt"
     ],
     "exclude": [
       "**/*_test.ts",

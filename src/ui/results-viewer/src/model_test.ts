@@ -102,7 +102,7 @@ Deno.test("text fallback remains usable when structuredContent is absent", () =>
 
 Deno.test("App identity is the unpublished viewer candidate", () => {
   assertEquals(DFM_APP_INFO.name, "io.casys.mcp-dfm.results");
-  assertEquals(DFM_APP_INFO.version, "0.3.0-local.viewer.1");
+  assertEquals(DFM_APP_INFO.version, "0.4.0");
   assertEquals(DFM_STATUS_CLASS, "dfm-viewer-state");
   assertEquals(SESSION_REJECTED_CODE, "session-rejected");
   assertEquals(

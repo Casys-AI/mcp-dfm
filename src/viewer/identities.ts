@@ -10,7 +10,7 @@ export const DFM_VIEW_APP_MANIFEST_URI = "ui://mcp-dfm/app-manifest" as const;
 
 export const DFM_VIEW_APP_ID = "io.casys.mcp-dfm.results" as const;
 export const DFM_VIEW_APP_TITLE = "DFM Measured Checks" as const;
-export const DFM_VIEW_APP_VERSION = "0.3.0-local.viewer.1" as const;
+export const DFM_VIEW_APP_VERSION = "0.4.0" as const;
 
 export const DFM_VIEWER_SESSION_SCHEMA =
   "io.casys.mcp-dfm.recorded-checks-session/1.0" as const;

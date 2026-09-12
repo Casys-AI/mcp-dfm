@@ -2,15 +2,15 @@
 
 All notable changes to `@casys/mcp-dfm` are documented here.
 
-## Unreleased
+## 0.4.0 — 2026-09-12
 
-- Added an unpublished local MCP App viewer candidate (`io.casys.mcp-dfm.results@0.3.0-local.viewer.1`)
-  for recorded Digital Thread measured-check sessions and optional single-tool raw
-  results. The solver package version remains `0.3.0`. The App does not run a
-  solver, recompute a verdict, or declare a part manufacturable. Historical
-  captures without mesh-topology or coverage fields display those readings as
-  unavailable. Private staged paths are refused. This candidate is not published
-  and does not adopt mcp-dfm 0.3 as the Digital Thread runtime pin.
+- Added the read-only MCP App `io.casys.mcp-dfm.results@0.4.0` for recorded Digital
+  Thread measured-check sessions and individual raw tool results.
+- Displays envelope, sampled thickness, and overhang evidence with exact recorded
+  authority; missing historical topology and ray coverage remain unavailable.
+- Refuses private staged paths and malformed sessions. The viewer does not run a solver,
+  recompute a verdict, or declare a part manufacturable.
+- Reproduces the bundled viewer in CI from an exact public MCP View source commit.
 
 ## 0.3.0 — 2026-08-28
 
@@ -20,11 +20,12 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 - `dfm_check_envelope` now labels a numerical divergence-theorem volume `unverified`
   unless that mesh is a single watertight component. Multiple closed components remain
   `unverified`: their global orientation and nesting are not classified. Derived mass is
-  withheld on the same condition.
-  `dfm_check_min_thickness` now returns closed ray-coverage evidence and marks its sampled
-  minimum `unverified` when topology or ray coverage does not establish its prerequisites.
-- JSR publication now runs the real Gmsh and NumPy fixture checks. The multi-architecture
-  image receives its OCI version from `deno.json`, and a versioned image tag must match it.
+  withheld on the same condition. `dfm_check_min_thickness` now returns closed
+  ray-coverage evidence and marks its sampled minimum `unverified` when topology or ray
+  coverage does not establish its prerequisites.
+- JSR publication now runs the real Gmsh and NumPy fixture checks. The
+  multi-architecture image receives its OCI version from `deno.json`, and a versioned
+  image tag must match it.
 
 ## 0.2.2 — 2026-08-27
 
@@ -37,8 +38,8 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 - Closed every registered tool input schema (`additionalProperties: false`). Unknown
   properties, non-finite values, non-positive sizes and dimensions, and a non-integer
   `sample_count` are rejected before the STEP snapshot or any native subprocess.
-  `max_overhang_deg` remains 0–90 inclusive; `build_direction` remains a non-zero
-  finite three-vector. No manufacturing defaults or maximum caps were added.
+  `max_overhang_deg` remains 0–90 inclusive; `build_direction` remains a non-zero finite
+  three-vector. No manufacturing defaults or maximum caps were added.
 - Published on JSR as `@casys/mcp-dfm@0.2.1`. Package metadata and server runtime
   identity are aligned at 0.2.1.
 - Multi-architecture GHCR image:
@@ -57,34 +58,34 @@ All notable changes to `@casys/mcp-dfm` are documented here.
 
 ### Added
 
-- `dfm_check_envelope` — bounding box (X/Y/Z in mm) and optional mass against a
-  declared print volume. Algorithm: Gmsh `-2 -format stl` → vertex extrema for bbox →
-  divergence theorem for volume → mass = volume_mm3 / 1e9 × density_kg_m3 (only if
-  density_kg_m3 is supplied). Measured on the healthy-box fixture: 40.0 × 30.0 × 20.0 mm,
-  volume 24000.0 mm³ exact.
+- `dfm_check_envelope` — bounding box (X/Y/Z in mm) and optional mass against a declared
+  print volume. Algorithm: Gmsh `-2 -format stl` → vertex extrema for bbox → divergence
+  theorem for volume → mass = volume_mm3 / 1e9 × density_kg_m3 (only if density_kg_m3 is
+  supplied). Measured on the healthy-box fixture: 40.0 × 30.0 × 20.0 mm, volume 24000.0
+  mm³ exact.
 
-- `dfm_check_overhangs` — surface overhang detection: STEP → surface STL via Gmsh,
-  then per-triangle angle between outward normal and the declared `build_direction`
-  (angle convention: 0° = straight down, 180° = straight up). Violation triangles are
-  clustered into spatial bounding-box zones for reporting. Measured on the L-bracket
-  fixture: overhang_area_mm2 > 1000 mm² at 45° threshold, build +Z.
+- `dfm_check_overhangs` — surface overhang detection: STEP → surface STL via Gmsh, then
+  per-triangle angle between outward normal and the declared `build_direction` (angle
+  convention: 0° = straight down, 180° = straight up). Violation triangles are clustered
+  into spatial bounding-box zones for reporting. Measured on the L-bracket fixture:
+  overhang_area_mm2 > 1000 mm² at 45° threshold, build +Z.
 
-- `dfm_check_min_thickness` — minimum wall thickness via bidirectional ray casting.
-  STEP → surface STL via Gmsh, then embedded Python subprocess using Möller-Trumbore
+- `dfm_check_min_thickness` — minimum wall thickness via bidirectional ray casting. STEP
+  → surface STL via Gmsh, then embedded Python subprocess using Möller-Trumbore
   ray-triangle intersection in numpy (no trimesh). For each sampled triangle centre,
   shoots a ray along the inward face normal and records the first intersection distance.
   Measured on the thin-wall fixture: min_thickness 0.8000 mm (exact), 12 violations
   under a 1 mm threshold at mesh_size 0.5, sample_count 300.
 
-- Stateless HTTP MCP server on port 3018, protocol `2026-07-28`, transport matching
-  the rest of the Casys engineering toolchain (`mcp-server@0.24.1`).
+- Stateless HTTP MCP server on port 3018, protocol `2026-07-28`, transport matching the
+  rest of the Casys engineering toolchain (`mcp-server@0.24.1`).
 
 - SHA-256 input attestation: every tool copies the STEP into a private temp directory,
   hashes the copy, optionally enforces an expected digest, and returns the hash in
   `input_artifact.sha256`. Pattern copied from `mcp-calculix/src/api/input-artifact.ts`.
 
-- Test fixtures generated by build123d inside the
-  `casys-digital-thread-mcp-build123d-1` container:
+- Test fixtures generated by build123d inside the `casys-digital-thread-mcp-build123d-1`
+  container:
   - `dfm_healthy_box.step` — solid box 40×30×20 mm (no DFM violations)
   - `dfm_overhang_60deg.step` — L-bracket with clear horizontal arm at 60° overhang
   - `dfm_thin_wall_08mm.step` — hollow box with a 0.8 mm wall

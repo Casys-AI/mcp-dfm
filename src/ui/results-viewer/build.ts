@@ -43,7 +43,17 @@ export async function buildResultsViewer(
       const template = await Deno.readTextFile(join(here, "index.html"));
       const css = await Deno.readTextFile(join(here, "src", "styles.css"));
       const js = await Deno.readTextFile(bundlePath);
+      const notices = await Deno.readTextFile(
+        join(here, "..", "..", "..", "THIRD_PARTY_NOTICES.txt"),
+      );
       const html = template
+        .replace(
+          "<head>",
+          () =>
+            `<head>\n<!--\n${
+              notices.replace(/--+/g, (run) => run.split("").join(" "))
+            }\n-->`,
+        )
         .replace("/* STYLES_PLACEHOLDER */", () => css)
         .replace("/* BUNDLE_PLACEHOLDER */", () => js)
         .replaceAll(/[ \t]+(?=\r?\n)/g, "");

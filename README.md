@@ -7,11 +7,11 @@ compares the resulting measurements with limits supplied by the caller.
 It does not declare a part "manufacturable" or select a printer, material, orientation,
 or threshold.
 
-| Tool                      | What it measures                                                  | Caller-declared comparison                                  |
-| ------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| Tool                      | What it measures                                                      | Caller-declared comparison                                  |
+| ------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `dfm_check_envelope`      | Axis-aligned X/Y/Z extents, surface-mesh volume status, optional mass | `build_volume_mm: { x, y, z }` and optional `density_kg_m3` |
-| `dfm_check_overhangs`     | Downward-facing triangle area and spatial zones                   | `build_direction` and `max_overhang_deg`                    |
-| `dfm_check_min_thickness` | Sampled inward-normal wall thickness and thin zones               | `min_thickness_mm`                                          |
+| `dfm_check_overhangs`     | Downward-facing triangle area and spatial zones                       | `build_direction` and `max_overhang_deg`                    |
+| `dfm_check_min_thickness` | Sampled inward-normal wall thickness and thin zones                   | `min_thickness_mm`                                          |
 
 Every registered check consumes an absolute `step_path`. Supplying
 `expected_step_sha256` makes the call fail before Gmsh runs if the private input
@@ -48,18 +48,19 @@ exists whose nesting could change the material volume. Multiple closed component
 `mass_kg` is emitted only when a caller supplies density and that volume status is
 `computed`; otherwise `mass_status` is `not_requested` or `unverified`.
 
-`dfm_check_min_thickness` also returns `ray_coverage`: the sampled triangle centres, rays
-that found an opposing surface, unresolved rays, and whether coverage is complete.
-`minimum_thickness_status` is `unverified` unless the mesh is watertight and every sampled
-ray completed. A `sampled` result is still an inward-normal sample, not a proof of the
-global minimum wall thickness.
+`dfm_check_min_thickness` also returns `ray_coverage`: the sampled triangle centres,
+rays that found an opposing surface, unresolved rays, and whether coverage is complete.
+`minimum_thickness_status` is `unverified` unless the mesh is watertight and every
+sampled ray completed. A `sampled` result is still an inward-normal sample, not a proof
+of the global minimum wall thickness.
 
 ## Quick start: Docker image over HTTP
 
 Version `0.3.0` packages Gmsh, Python, and NumPy for `linux/amd64` and `linux/arm64`.
-The Docker workflow derives its OCI version from `deno.json` and accepts a semantic image
-tag only when the pushed Git tag is exactly `v0.3.0`. After that release workflow
-completes, use the versioned image and pin the GHCR digest in a deployment manifest.
+The Docker workflow derives its OCI version from `deno.json` and accepts a semantic
+image tag only when the pushed Git tag matches the package version. After that release
+workflow completes, use the versioned image and pin the GHCR digest in a deployment
+manifest.
 
 ```bash
 docker run --rm \
@@ -68,10 +69,9 @@ docker run --rm \
   ghcr.io/casys-ai/mcp-dfm@sha256:fd161cfd936773fa551e281d1ae371f7edc544f996eb966e6466d5ff49f384f5 http
 ```
 
-The image's `http` mode provides stateless HTTP on
-`http://127.0.0.1:3018/mcp`, protocol `2026-07-28`. Use paths as seen by the container,
-such as `/data/bracket.step`, not host paths. Docker Desktop must be allowed to share the
-mounted directory where applicable.
+The image's `http` mode provides stateless HTTP on `http://127.0.0.1:3018/mcp`, protocol
+`2026-07-28`. Use paths as seen by the container, such as `/data/bracket.step`, not host
+paths. Docker Desktop must be allowed to share the mounted directory where applicable.
 
 ## HTTP call example
 
@@ -147,21 +147,21 @@ Use `structuredContent` as the machine-readable result. The text `content` is a 
 summary for the model. Floating-point values are not rounded in the wire result, so
 consumers should apply tolerances appropriate to their case.
 
-`ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority
-for a version or capability. Resolve the `0.3.0` image to its GHCR digest for a pinned
+`ghcr.io/casys-ai/mcp-dfm:latest` is a mutable convenience tag, not the authority for a
+version or capability. Resolve the `0.3.0` image to its GHCR digest for a pinned
 deployment.
 
 ## Tool contracts
 
 Every registered input object is closed (`additionalProperties: false`). Unknown
 properties are rejected both by MCP schema validation and when a handler is invoked
-directly. Numeric sizes and dimensions must
-be finite and strictly positive: build-volume X/Y/Z, `mesh_size_mm`, optional
-`cluster_radius_mm`, optional `density_kg_m3`, `min_thickness_mm`, and optional
-`timeout_ms`. `sample_count` must be a finite positive integer. `max_overhang_deg`
-remains 0–90° inclusive; `build_direction` must be a non-zero three-vector with finite
-components. These checks run before the STEP snapshot or any native subprocess. The
-server still does not invent manufacturing defaults or arbitrary maximum caps.
+directly. Numeric sizes and dimensions must be finite and strictly positive:
+build-volume X/Y/Z, `mesh_size_mm`, optional `cluster_radius_mm`, optional
+`density_kg_m3`, `min_thickness_mm`, and optional `timeout_ms`. `sample_count` must be a
+finite positive integer. `max_overhang_deg` remains 0–90° inclusive; `build_direction`
+must be a non-zero three-vector with finite components. These checks run before the STEP
+snapshot or any native subprocess. The server still does not invent manufacturing
+defaults or arbitrary maximum caps.
 
 ### `dfm_check_envelope`
 
@@ -171,18 +171,18 @@ when density is supplied:
 
 `mass_kg = volume_mm3 / 1e9 × density_kg_m3`
 
-| Field                  | Required | Description                                                                                  |
-| ---------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `step_path`            | yes      | Absolute path to the STEP file on the server filesystem                                      |
+| Field                  | Required | Description                                                                                 |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file on the server filesystem                                     |
 | `build_volume_mm`      | yes      | Object with strictly positive X, Y, and Z extents in mm: `{ "x": 200, "y": 200, "z": 200 }` |
-| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm                                     |
-| `expected_step_sha256` | no       | Expected 64-character STEP SHA-256; mismatch aborts before Gmsh                              |
-| `density_kg_m3`        | no       | Finite strictly positive caller-owned density used to add `mass_kg`; no density is inferred  |
-| `timeout_ms`           | no       | Finite strictly positive Gmsh subprocess timeout in ms; default 60000                        |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm                                    |
+| `expected_step_sha256` | no       | Expected 64-character STEP SHA-256; mismatch aborts before Gmsh                             |
+| `density_kg_m3`        | no       | Finite strictly positive caller-owned density used to add `mass_kg`; no density is inferred |
+| `timeout_ms`           | no       | Finite strictly positive Gmsh subprocess timeout in ms; default 60000                       |
 
 The comparison is axis by axis in the STEP coordinate system. The tool does not rotate
-the part to find a tighter fit. A numerical `volume_mm3` is kept for diagnosis, but it is
-explicitly `unverified` unless the returned mesh topology establishes one connected
+the part to find a tighter fit. A numerical `volume_mm3` is kept for diagnosis, but it
+is explicitly `unverified` unless the returned mesh topology establishes one connected
 watertight shell; derived mass is withheld on that condition.
 
 Measured native fixture result at `mesh_size_mm: 5`: 40.0 × 30.0 × 20.0 mm and
@@ -196,15 +196,15 @@ and `-build_direction`. The server normalizes any non-zero three-vector. With
 triangle is included when its angle is strictly less than `max_overhang_deg`; matching
 triangles are clustered into zones.
 
-| Field                  | Required | Description                                                          |
-| ---------------------- | -------- | -------------------------------------------------------------------- |
-| `step_path`            | yes      | Absolute path to the STEP file                                       |
-| `build_direction`      | yes      | Non-zero finite `[x, y, z]` build direction; `[0, 0, 1]` is +Z      |
-| `max_overhang_deg`     | yes      | Finite threshold in degrees from the downward direction, 0–90 inclusive |
-| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm             |
-| `expected_step_sha256` | no       | Expected STEP SHA-256                                                |
+| Field                  | Required | Description                                                               |
+| ---------------------- | -------- | ------------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file                                            |
+| `build_direction`      | yes      | Non-zero finite `[x, y, z]` build direction; `[0, 0, 1]` is +Z            |
+| `max_overhang_deg`     | yes      | Finite threshold in degrees from the downward direction, 0–90 inclusive   |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh surface element size in mm                  |
+| `expected_step_sha256` | no       | Expected STEP SHA-256                                                     |
 | `cluster_radius_mm`    | no       | Finite strictly positive spatial merge radius; default `3 × mesh_size_mm` |
-| `timeout_ms`           | no       | Finite strictly positive Gmsh timeout in ms; default 60000           |
+| `timeout_ms`           | no       | Finite strictly positive Gmsh timeout in ms; default 60000                |
 
 Important bed-contact behavior: the provider does not remove the bottom face. For the
 healthy-box fixture at +Z, the returned zone is the 1200 mm² face at Z = -10 mm, with
@@ -226,15 +226,15 @@ to cast an inward-normal Möller-Trumbore ray. It reports the first opposing sur
 distance, the minimum sampled distance, sample coverage, and clustered points below the
 declared threshold.
 
-| Field                  | Required | Description                                                                   |
-| ---------------------- | -------- | ----------------------------------------------------------------------------- |
-| `step_path`            | yes      | Absolute path to the STEP file                                                |
-| `min_thickness_mm`     | yes      | Finite strictly positive caller-declared violation threshold                  |
-| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh element size; start at most half the threshold  |
-| `expected_step_sha256` | no       | Expected STEP SHA-256                                                         |
-| `sample_count`         | no       | Finite positive integer triangle centres to sample; default 500               |
-| `cluster_radius_mm`    | no       | Finite strictly positive spatial merge radius; default `3 × mesh_size_mm`     |
-| `timeout_ms`           | no       | Finite strictly positive total Gmsh and Python timeout in ms; default 120000  |
+| Field                  | Required | Description                                                                  |
+| ---------------------- | -------- | ---------------------------------------------------------------------------- |
+| `step_path`            | yes      | Absolute path to the STEP file                                               |
+| `min_thickness_mm`     | yes      | Finite strictly positive caller-declared violation threshold                 |
+| `mesh_size_mm`         | yes      | Finite strictly positive Gmsh element size; start at most half the threshold |
+| `expected_step_sha256` | no       | Expected STEP SHA-256                                                        |
+| `sample_count`         | no       | Finite positive integer triangle centres to sample; default 500              |
+| `cluster_radius_mm`    | no       | Finite strictly positive spatial merge radius; default `3 × mesh_size_mm`    |
+| `timeout_ms`           | no       | Finite strictly positive total Gmsh and Python timeout in ms; default 120000 |
 
 This is sampled inward-normal thickness, not a global exact minimum-distance proof.
 Sampling can miss a small or diagonal thin region. The result reports the exact mesh
@@ -276,25 +276,25 @@ deno task serve
 deno task serve -- --port=3099 --hostname=0.0.0.0
 ```
 
-Version `0.3.0` provides both stateless HTTP and native stdio. For stateless HTTP through
-the JSR package:
+Version `0.4.0` provides both stateless HTTP and native stdio. For stateless HTTP
+through the JSR package:
 
 ```bash
-deno run -A jsr:@casys/mcp-dfm@0.3.0/server --port=3018
+deno run -A jsr:@casys/mcp-dfm@0.4.0/server --port=3018
 ```
 
 The first two commands expose stateless HTTP.
 
 ### Native stdio from a checkout, JSR, or published image
 
-Version `0.3.0` provides native stdio. Use an exact entrypoint:
+Version `0.4.0` provides native stdio. Use an exact entrypoint:
 
 ```bash
 # checkout
 deno run -A server.ts --stdio
 
-# JSR 0.3.0
-deno run -A jsr:@casys/mcp-dfm@0.3.0/server --stdio
+# JSR 0.4.0
+deno run -A jsr:@casys/mcp-dfm@0.4.0/server --stdio
 ```
 
 For native stdio from the published image, pass `stdio` to Docker and keep stdin open
@@ -306,36 +306,41 @@ docker run --rm -i \
   ghcr.io/casys-ai/mcp-dfm@sha256:fd161cfd936773fa551e281d1ae371f7edc544f996eb966e6466d5ff49f384f5 stdio
 ```
 
-## MCP App viewer candidate (unpublished)
+## MCP App viewer
 
-This checkout includes a local MCP App, `io.casys.mcp-dfm.results@0.3.0-local.viewer.1`.
-The solver identity stays `0.3.0`. The App is a read-only projection of:
+Version `0.4.0` includes the MCP App `io.casys.mcp-dfm.results@0.4.0`. The App is a
+read-only projection of:
 
 - a closed recorded session `io.casys.mcp-dfm.recorded-checks-session/1.0` delivered
   through `viewer.session.apply` (the Digital Thread path);
-- optional single-tool raw results for the three existing checks, with no
-  invented whole-case verdict.
+- optional single-tool raw results for the three existing checks, with no invented
+  whole-case verdict.
 
 It does not execute Gmsh, recompute evaluations, or declare a part manufacturable.
-Recorded Digital Thread evaluations are labelled as Digital Thread-owned. Quality
-fields that a historical `DfmCheckCapture` does not record (`mesh_topology`,
-`volume_status`, `minimum_thickness_status`, `ray_coverage`) display as
-unavailable. Private `stagedPath` / `source_path` values are stripped or rejected.
+Recorded Digital Thread evaluations are labelled as Digital Thread-owned. Quality fields
+that a historical `DfmCheckCapture` does not record (`mesh_topology`, `volume_status`,
+`minimum_thickness_status`, `ray_coverage`) display as unavailable. Private `stagedPath`
+/ `source_path` values are stripped or rejected.
 
-The HTML bundle is part of the package layout. Building it requires explicit local
-split MCP View packages (`@casys/mcp-view@0.9.3`, `@casys/mcp-view-contracts@0.1.0`,
+The HTML bundle is part of the package layout. Rebuilding it uses the published MCP View
+source commit `b08802df353bb25d25a1c8d64b22ea61b5287ae0`, with split packages
+(`@casys/mcp-view@0.9.3`, `@casys/mcp-view-contracts@0.1.0`,
 `@casys/mcp-view-components@0.9.0`) and does not fall back to a published SDK:
 
 ```bash
-export MCP_VIEW_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view
-export MCP_VIEW_CONTRACTS_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view-contracts
-export MCP_VIEW_COMPONENTS_LOCAL_ROOT=/absolute/path/to/mcp-server/packages/view-components
+git clone https://github.com/Casys-AI/mcp-server.git .build/mcp-server
+git -C .build/mcp-server checkout b08802df353bb25d25a1c8d64b22ea61b5287ae0
+export MCP_VIEW_LOCAL_ROOT="$PWD/.build/mcp-server/packages/view"
+export MCP_VIEW_CONTRACTS_LOCAL_ROOT="$PWD/.build/mcp-server/packages/view-contracts"
+export MCP_VIEW_COMPONENTS_LOCAL_ROOT="$PWD/.build/mcp-server/packages/view-components"
 deno task build:ui
 deno task check:ui:bundle
 ```
 
-This viewer candidate is not a JSR or GHCR release. Digital Thread production
-remains pinned to mcp-dfm 0.1.0 until a separate adoption decision.
+The package and App identities are versioned together. The Docker quick-start above
+retains the previously published 0.3.0 image digest; resolve the new 0.4.0 image after
+its release workflow succeeds. Consumer runtime qualification and adoption remain
+separate from publishing this provider release.
 
 ## Development
 
@@ -345,10 +350,11 @@ DFM_RUN_NATIVE=1 deno task test
 ```
 
 `release:check` runs formatting, type checking, linting, non-native tests, the stdio
-wire tests, viewer model tests, and the versioned UI bundle freshness gate. The reusable CI quality workflow runs that fast job without `DFM_RUN_NATIVE`;
-its native job installs Gmsh, Python, and NumPy, then runs
-`DFM_RUN_NATIVE=1 deno task test`. A pull-request workflow calls the same quality workflow,
-which must complete before JSR publication or GHCR image build and push.
+wire tests, viewer model tests, and the versioned UI bundle freshness gate. The reusable
+CI quality workflow runs that fast job without `DFM_RUN_NATIVE`; its native job installs
+Gmsh, Python, and NumPy, then runs `DFM_RUN_NATIVE=1 deno task test`. A pull-request
+workflow calls the same quality workflow, which must complete before JSR publication or
+GHCR image build and push.
 
 A workflow publishes a new JSR version only when the version in `deno.json` is not
 already present. A separate workflow publishes the multi-arch GHCR image; a semantic

@@ -273,7 +273,7 @@ Deno.test("malformed live quantities are rejected", () => {
 
 Deno.test("App manifest binds the unpublished viewer candidate without changing solver version", () => {
   assertEquals(DFM_VIEW_APP_MANIFEST.app.version, DFM_VIEW_APP_VERSION);
-  assertEquals(DFM_VIEW_APP_MANIFEST.app.version, "0.3.0-local.viewer.1");
+  assertEquals(DFM_VIEW_APP_MANIFEST.app.version, "0.4.0");
   assertEquals(
     DFM_VIEW_APP_MANIFEST.resources[0].acceptedActions[0],
     VIEWER_SESSION_APPLY_ACTION,
